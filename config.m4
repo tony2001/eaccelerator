@@ -237,6 +237,16 @@ dnl pthread support
     msg=yes,msg=no,msg=no)
   AC_MSG_RESULT([$msg])
 
+dnl pthread rwlock support
+  AC_MSG_CHECKING(for pthread rwlock semaphores support)
+  AC_TRY_RUN([#define MM_SEM_RWLOCK
+#define MM_TEST_SEM
+#include "$ext_srcdir/mm.c"
+],dnl
+    mm_sem_rwlock=yes
+    msg=yes,msg=no,msg=no)
+  AC_MSG_RESULT([$msg])
+
 dnl posix semaphore support
   AC_MSG_CHECKING(for posix semaphores support)
   AC_TRY_RUN([#define MM_SEM_POSIX
@@ -281,7 +291,11 @@ dnl flock semaphore support
 
 dnl Determine the best type
   AC_MSG_CHECKING(for best semaphores type)
-  if test "$mm_sem_spinlock" = "yes"; then
+  if test "$mm_sem_rwlock" = "yes"; then
+    AC_DEFINE(MM_SEM_RWLOCK, 1, [Define if you like to use pthread rwlock based semaphores])
+    msg="rwlock"
+    PHP_ADD_LIBRARY(pthread)
+  elif test "$mm_sem_spinlock" = "yes"; then
     AC_DEFINE(MM_SEM_SPINLOCK, 1, [Define if you like to use spinlock based semaphores])
     msg="spinlock"
   elif test "$mm_sem_ipc" = "yes"; then

@@ -93,7 +93,7 @@
 #ifdef MM_SEM_POSIX
 #  include <semaphore.h>
 #endif
-#ifdef MM_SEM_PTHREAD
+#if defined(MM_SEM_PTHREAD) || defined(MM_SEM_RWLOCK)
 #  include <pthread.h>
 #endif
 
@@ -242,6 +242,65 @@ static void mm_destroy_lock(mm_mutex* lock) {
 }
 
 /* ######################################################################### */
+
+#elif defined(MM_SEM_RWLOCK)
+
+#define MM_SEM_TYPE "pthread rwlock"
+
+typedef struct mm_mutex {
+  pthread_rwlock_t lock;
+} mm_mutex;
+
+static int mm_init_lock(const char* key, mm_mutex* lock) {
+  int res;
+  pthread_rwlockattr_t attr;
+
+  if (pthread_rwlockattr_init(&attr) != 0) {
+    return 0;
+  }
+
+#ifdef __USE_UNIX98
+  /* PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP allows to avoid writer starvation 
+   as long as any read locking is not done in a recursive fashion */
+
+  pthread_rwlockattr_setkind_np(&attr, PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP);
+#endif
+
+  if (pthread_rwlockattr_setpshared(&attr, PTHREAD_PROCESS_SHARED) != 0) {
+    return 0;
+  }
+
+  if (pthread_rwlock_init(&lock->lock, &attr) != 0) {
+    return 0;
+  }
+
+  pthread_rwlockattr_destroy(&attr);
+  return 1;
+}
+
+static int mm_do_lock(mm_mutex* lock, int kind) {
+  if (kind == MM_LOCK_RD) {
+    if (pthread_rwlock_rdlock(&lock->lock) != 0) {
+      return 0;
+    }
+  } else {
+    if (pthread_rwlock_wrlock(&lock->lock) != 0) {
+      return 0;
+    }
+  }
+  return 1;
+}
+
+static int mm_do_unlock(mm_mutex* lock) {
+  if (pthread_rwlock_unlock(&lock->lock) != 0) {
+    return 0;
+  }
+  return 1;
+}
+
+static void mm_destroy_lock(mm_mutex* lock) {
+  /* do nothing */
+}
 
 #elif defined(MM_SEM_PTHREAD)
 

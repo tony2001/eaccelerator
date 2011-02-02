@@ -1392,6 +1392,8 @@ PHP_MINFO_FUNCTION(eaccelerator) {
   php_info_print_table_start();
   php_info_print_table_header(2, "eAccelerator support", "enabled");
   php_info_print_table_row(2, "Version", EACCELERATOR_VERSION);
+  php_info_print_table_row(2, "Shared memory type", EAC_SHM_TYPE);
+  php_info_print_table_row(2, "Semaphores type", EAC_SEM_TYPE);
   php_info_print_table_row(2, "Caching Enabled", (EAG(enabled) && (ea_mm_instance != NULL) && 
               ea_mm_instance->enabled)?"true":"false");
   php_info_print_table_row(2, "Optimizer Enabled", (EAG(optimizer_enabled) && 

@@ -226,7 +226,7 @@ dnl determine the best type
       ;;
   esac
 
-  AC_DEFINE_UNQUOTED(EAC_SHM_TYPE, $shm_type, [eAccelerator shared memory type.]) 
+  AC_DEFINE_UNQUOTED(EAC_SHM_TYPE, "$shm_type", [eAccelerator shared memory type.]) 
 
 dnl spinlock test
   AC_MSG_CHECKING(for spinlock semaphores support)
@@ -387,7 +387,7 @@ dnl Determine the best type
       ;;
   esac
 
-  AC_DEFINE_UNQUOTED(EAC_SEM_TYPE, $sem_type, [eAccelerator semaphores type.]) 
+  AC_DEFINE_UNQUOTED(EAC_SEM_TYPE, "$sem_type", [eAccelerator semaphores type.]) 
   AC_DEFINE_UNQUOTED(EA_USERID, $PHP_EACCELERATOR_USERID, [The userid eAccelerator will be running under.]) 
   PHP_SUBST(EACCELERATOR_SHARED_LIBADD)
 fi

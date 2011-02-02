@@ -979,7 +979,7 @@ static MM* mm_attach_shm(const char* key, size_t size) {
   char*   ch;
 
 
-  strcpy(s,key);
+  strlcpy(s, key, sizeof(s));
   for (ch = s; *ch; ++ch) {
     if (*ch == ':' || *ch == '/' || *ch == '\\') {
       *ch = '_';
@@ -1022,7 +1022,7 @@ static MM* mm_create_shm(const char* key, size_t size) {
   char*   ch;
 
 
-  strcpy(s,key);
+  strlcpy(s, key, sizeof(s));
   for (ch = s; *ch; ++ch) {
     if (*ch == ':' || *ch == '/' || *ch == '\\') {
       *ch = '_';

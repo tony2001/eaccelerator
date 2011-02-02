@@ -81,7 +81,6 @@ static long ea_shm_size = 0;
 static long ea_shm_ttl = 0;
 static long ea_shm_prune_period = 0;
 extern long ea_debug;
-zend_bool ea_scripts_shm_only = 0;
 
 eaccelerator_mm* ea_mm_instance = NULL;
 static int ea_is_zend_extension = 0;
@@ -257,7 +256,6 @@ static int init_mm(TSRMLS_D) {
   ea_mm_instance->optimizer_enabled = 1;
   ea_mm_instance->check_mtime_enabled = 1;
   ea_mm_instance->removed = NULL;
-  ea_mm_instance->cache_dir_uid = 0;
   ea_mm_instance->last_prune = time(NULL);	/* this time() call is harmless since this is init phase */
   EACCELERATOR_PROTECT();
   return SUCCESS;
@@ -377,32 +375,6 @@ static void decode_version(int version, int extra, char *str, size_t len)
 }
 #endif
 
-static char num2hex[] = {'0','1','2','3','4','5','6','7','8','9','a','b','c','d','e','f'};
-
-/* Function to create a hash key when filenames are used */
-int eaccelerator_md5(char* s, const char* prefix, const char* key TSRMLS_DC) {
-  char md5str[33];
-  PHP_MD5_CTX context;
-  unsigned char digest[16];
-  int i;
-  int n;
-
-  md5str[0] = '\0';
-  PHP_MD5Init(&context);
-  PHP_MD5Update(&context, (unsigned char*)key, strlen(key));
-  PHP_MD5Final(digest, &context);
-  make_digest(md5str, digest);
-  snprintf(s, MAXPATHLEN-1, "%s/%d/", EAG(cache_dir), ea_mm_instance->cache_dir_uid);
-  n = strlen(s);
-  for (i = 0; i < EACCELERATOR_HASH_LEVEL && n < MAXPATHLEN - 1; i++) {
-    s[n++] = md5str[i];
-    s[n++] = '/';
-  }
-  s[n] = 0;
-  snprintf(&s[n], MAXPATHLEN-1-n, "%s%s", prefix, md5str);
-  return 1;
-}
-
 /* Remove expired keys, content and scripts from the memory cache */
 void eaccelerator_prune(time_t t) {
   unsigned int i;
@@ -518,184 +490,6 @@ unsigned int eaccelerator_crc32(const char *p, size_t n) {
   }
   return ~crc;
 }
-
-/******************************************************************************/
-/* Cache file functions.														*/
-/******************************************************************************/
-
-/* A function to check if the header of a cache file valid is.
- */
-inline int check_header(ea_file_header *hdr)
-{
-#ifdef DEBUG
-  char current[255];
-  char cache[255];
-#endif
-	
-  if (strncmp(hdr->magic, EA_MAGIC, 8) != 0) {
-#ifdef DEBUG
-    ea_debug_printf(EA_DEBUG, "Magic header mismatch.");
-#endif
-	return 0;	
-  }
-  if (hdr->eaccelerator_version[0] != binary_eaccelerator_version[0] 
-      || hdr->eaccelerator_version[1] != binary_eaccelerator_version[1]) {
-#ifdef DEBUG
-    decode_version(hdr->eaccelerator_version[0], hdr->eaccelerator_version[1], cache, 255);
-    decode_version(binary_eaccelerator_version[0], binary_eaccelerator_version[1], current, 255);
-    ea_debug_printf(EA_DEBUG, "eAccelerator version mismatch, cache file %s and current version %s\n", cache, current);
-#endif
-    return 0;
-  }
-  if (hdr->zend_version[0] != binary_zend_version[0] 
-      || hdr->zend_version[1] != binary_zend_version[1]) {
-#ifdef DEBUG
-    decode_version(hdr->zend_version[0], hdr->zend_version[1], cache, 255);
-    decode_version(binary_zend_version[0], binary_zend_version[1], current, 255);
-    ea_debug_printf(EA_DEBUG, "Zend version mismatch, cache file %s and current version %s\n", cache, current);
-#endif
-    return 0;
-  }
-  if (hdr->php_version[0] != binary_php_version[0] 
-      || hdr->php_version[1] != binary_php_version[1]) {
-#ifdef DEBUG
-    decode_version(hdr->php_version[0], hdr->php_version[1], cache, 255);
-    decode_version(binary_php_version[0], binary_php_version[1], current, 255);
-    ea_debug_printf(EA_DEBUG, "PHP version mismatch, cache file %s and current version %s\n", cache, current);
-#endif
-    return 0;
-  }
-  return 1;
-}
-
-/* A function to create the header for a cache file.
- */
-inline void init_header(ea_file_header *hdr)
-{
-  strncpy(hdr->magic, EA_MAGIC, 8);
-  hdr->eaccelerator_version[0] = binary_eaccelerator_version[0];
-  hdr->eaccelerator_version[1] = binary_eaccelerator_version[1];
-  hdr->zend_version[0] = binary_zend_version[0];
-  hdr->zend_version[1] = binary_zend_version[1];
-  hdr->php_version[0] = binary_php_version[0];	
-  hdr->php_version[1] = binary_php_version[1];
-}
-/* Retrieve a cache entry from the cache directory */
-static ea_cache_entry* hash_find_file(const char  *key, struct stat *buf TSRMLS_DC) {
-  int f;
-  char s[MAXPATHLEN];
-  ea_file_header hdr;
-  ea_cache_entry *p = NULL;
-  int use_shm = 1;
-
-  if (!eaccelerator_md5(s, "/eaccelerator-", key TSRMLS_CC)) {
-    return NULL;
-  }
-
-  if ((f = open(s, O_RDONLY | O_BINARY)) > 0) {
-    EACCELERATOR_FLOCK(f, LOCK_SH);
-    if (read(f, &hdr, sizeof(hdr)) != sizeof(hdr)) {
-      EACCELERATOR_FLOCK(f, LOCK_UN);
-      close(f);
-      return NULL;
-    }
-    if (!check_header(&hdr)) {
-      EACCELERATOR_FLOCK(f, LOCK_UN);
-      close(f);
-      unlink(s);
-      return NULL;
-    }
-    p = eaccelerator_malloc(hdr.size);
-    if (p == NULL) {
-      p = eaccelerator_malloc2(hdr.size TSRMLS_CC);
-    }
-    if (p == NULL) {
-      p = emalloc(hdr.size);
-      use_shm = 0;
-    }
-    if (p == NULL) {
-      EACCELERATOR_FLOCK(f, LOCK_UN);
-      close(f);
-      return NULL;
-    }
-    if (read(f, p, hdr.size) != hdr.size ||
-        p->size != hdr.size ||
-        hdr.crc32 != eaccelerator_crc32((const char*)p,p->size)) {
-      EACCELERATOR_FLOCK(f, LOCK_UN);
-      close(f);
-      unlink(s);
-      if (use_shm) eaccelerator_free(p); else efree(p);
-			DBG(ea_debug_printf, (EA_DEBUG, "cache file is corrupted\n"));
-      return NULL;
-    }
-    EACCELERATOR_FLOCK(f, LOCK_UN);
-    close(f);
-    if (strcmp(key,p->realfilename) != 0) {
-      if (use_shm) eaccelerator_free(p); else efree(p);
-      return NULL;
-    }
-    if ((EAG(check_mtime_enabled) && ea_mm_instance->check_mtime_enabled &&
-        (buf->st_mtime != p->mtime || buf->st_size != p->filesize))
-       ) {
-      /* key is invalid. Remove it. */
-      if (use_shm) eaccelerator_free(p); else efree(p);
-      unlink(s);
-      return NULL;
-    }
-    eaccelerator_fixup(p TSRMLS_CC);
-    if (use_shm) {
-      p->nhits    = 1;
-      p->nreloads = 1;
-      p->use_cnt  = 1;
-      p->removed  = 0;
-      if (ea_shm_ttl > 0) {
-        p->ttl = EAG(req_start) + ea_shm_ttl;
-      } else {
-        p->ttl = 0;
-      }
-      p->ts       = hdr.ts;	/* get cached item creation timestamp from cache file */
-      hash_add_mm(p);
-    } else {
-      p->use_cnt  = 0;
-      p->removed  = 1;
-    }
-    mm_check_mem(p); 
-    return p;
-  }
-  return NULL;
-}
-
-/* Add a cache entry to the cache directory */
-static int hash_add_file(ea_cache_entry *p TSRMLS_DC) {
-  int f;
-  int ret = 0;
-  char s[MAXPATHLEN];
-  ea_file_header hdr;
-
-  if (!eaccelerator_md5(s, "/eaccelerator-", p->realfilename TSRMLS_CC)) {
-    return 0;
-  }
-
-  unlink(s);
-  f = open(s, O_CREAT | O_WRONLY | O_EXCL | O_BINARY, S_IRUSR | S_IWUSR);
-  if (f > 0) {
-    EACCELERATOR_FLOCK(f, LOCK_EX);
-    init_header(&hdr);
-    hdr.size  = p->size;
-    hdr.mtime = p->mtime;
-    hdr.ts    = p->ts;
-    p->next = p;
-    hdr.crc32 = eaccelerator_crc32((const char*)p,p->size);
-    ret = (write(f, &hdr, sizeof(hdr)) == sizeof(hdr));
-    if (ret) ret = (write(f, p, p->size) == p->size);
-    EACCELERATOR_FLOCK(f, LOCK_UN);
-    close(f);
-  } else {
-    ea_debug_log("EACCELERATOR: Open for write failed for \"%s\": %s\n", s, strerror(errno));
-  }
-  return ret;
-}
-
 /* called after succesful compilation, from eaccelerator_compile file */
 /* Adds the data from the compilation of the script to the cache */
 static int eaccelerator_store(char* key, struct stat *buf, int nreloads,
@@ -703,7 +497,6 @@ static int eaccelerator_store(char* key, struct stat *buf, int nreloads,
                          Bucket* f, Bucket *c TSRMLS_DC) {
   ea_cache_entry *p;
   int len = strlen(key);
-  int use_shm = 1;
   int ret = 0;
   int size = 0;
   void *data = NULL;
@@ -725,11 +518,6 @@ static int eaccelerator_store(char* key, struct stat *buf, int nreloads,
   if (EAG(mem) == NULL) {
     EAG(mem) = eaccelerator_malloc2(size TSRMLS_CC);
   }
-  if (!EAG(mem) && !ea_scripts_shm_only) {
-    EACCELERATOR_PROTECT();
-    EAG(mem) = emalloc(size);
-    use_shm = 0;
-  }
   if (EAG(mem)) {
     data = EAG(mem);
     memset(EAG(mem), 0, size);
@@ -740,23 +528,15 @@ static int eaccelerator_store(char* key, struct stat *buf, int nreloads,
     p->filesize = buf->st_size;
     p->size     = size;
     p->nreloads = nreloads;
-    if (use_shm) {
-      if (ea_shm_ttl > 0) {
-        p->ttl = EAG(req_start) + ea_shm_ttl;
-      } else {
-        p->ttl = 0;
-      }
-      if (!ea_scripts_shm_only) {
-        hash_add_file(p TSRMLS_CC);
-      }
-      hash_add_mm(p);
-      EACCELERATOR_PROTECT();
-      ret = 1;
-      mm_check_mem(data);
+    if (ea_shm_ttl > 0) {
+      p->ttl = EAG(req_start) + ea_shm_ttl;
     } else {
-      ret =  hash_add_file(p TSRMLS_CC);
-      efree(p);
+      p->ttl = 0;
     }
+    hash_add_mm(p);
+    EACCELERATOR_PROTECT();
+    ret = 1;
+    mm_check_mem(data);
   }
   return ret;
 }
@@ -771,9 +551,6 @@ static zend_op_array* eaccelerator_restore(char *realname, struct stat *buf,
   *nreloads = 1;
   EACCELERATOR_UNPROTECT();
   p = hash_find_mm(realname, buf, nreloads, ((ea_shm_ttl > 0)?(compile_time + ea_shm_ttl):0) TSRMLS_CC);
-  if (p == NULL && !ea_scripts_shm_only) {
-    p = hash_find_file(realname, buf TSRMLS_CC);
-  }
   EACCELERATOR_PROTECT();
   if (p != NULL && p->op_array != NULL) {
     /* only restore file when open_basedir allows it */
@@ -1468,16 +1245,6 @@ static PHP_INI_MH(eaccelerator_OnUpdateLong) {
   return SUCCESS;
 }
 
-static PHP_INI_MH(eaccelerator_OnUpdateBool) {
-  zend_bool *p = (zend_bool*)mh_arg1;
-  if (strncasecmp("on", new_value, sizeof("on"))) {
-    *p = (zend_bool) atoi(new_value);
-  } else {
-    *p = (zend_bool) 1;
-  }
-  return SUCCESS;
-}
-
 PHP_INI_BEGIN()
 STD_PHP_INI_ENTRY("eaccelerator.enable",         "1", PHP_INI_ALL, OnUpdateBool, enabled, zend_eaccelerator_globals, eaccelerator_globals)
 STD_PHP_INI_ENTRY("eaccelerator.optimizer",      "1", PHP_INI_ALL, OnUpdateBool, optimizer_enabled, zend_eaccelerator_globals, eaccelerator_globals)
@@ -1487,11 +1254,9 @@ ZEND_INI_ENTRY1("eaccelerator.shm_prune_period", "0", PHP_INI_SYSTEM, eaccelerat
 ZEND_INI_ENTRY1("eaccelerator.debug",           "1", PHP_INI_SYSTEM, eaccelerator_OnUpdateLong, &ea_debug)
 STD_PHP_INI_ENTRY("eaccelerator.log_file",      "", PHP_INI_SYSTEM, OnUpdateString, ea_log_file, zend_eaccelerator_globals, eaccelerator_globals)
 STD_PHP_INI_ENTRY("eaccelerator.check_mtime",     "1", PHP_INI_SYSTEM, OnUpdateBool, check_mtime_enabled, zend_eaccelerator_globals, eaccelerator_globals)
-ZEND_INI_ENTRY1("eaccelerator.shm_only",        "0", PHP_INI_SYSTEM, eaccelerator_OnUpdateBool, &ea_scripts_shm_only)
 #ifdef WITH_EACCELERATOR_INFO
 STD_PHP_INI_ENTRY("eaccelerator.allowed_admin_path",       "", PHP_INI_SYSTEM, OnUpdateString, allowed_admin_path, zend_eaccelerator_globals, eaccelerator_globals)
 #endif
-STD_PHP_INI_ENTRY("eaccelerator.cache_dir",      "/tmp/eaccelerator", PHP_INI_SYSTEM, OnUpdateString, cache_dir, zend_eaccelerator_globals, eaccelerator_globals)
 PHP_INI_ENTRY("eaccelerator.filter",             "",  PHP_INI_ALL, eaccelerator_filter)
 PHP_INI_END()
 
@@ -1611,7 +1376,6 @@ static void eaccelerator_init_globals(zend_eaccelerator_globals *eag)
 {
 	eag->used_entries = NULL;
 	eag->enabled = 1;
-	eag->cache_dir = NULL;
 	eag->optimizer_enabled = 1;
 	eag->check_mtime_enabled = 1;
 	eag->compiler = 0;
@@ -1658,94 +1422,6 @@ static int eaccelerator_check_php_version(TSRMLS_D) {
   return ret;
 }
 
-/*
- * Create a hash directory
- */
-static void make_hash_dirs(char *fullpath, int lvl) {
-	int j;
-	int n = strlen(fullpath);
-
-	//ea_debug_error("Creating hash in %s at level %d\n", fullpath, lvl);
-
-	if (lvl < 1) {
-		return;
-	}
-
-	if (fullpath[n-1] != '/') {
-		fullpath[n++] = '/';
-	}
-
-	for (j = 0; j < 16; j++) {
-		fullpath[n] = num2hex[j];
-		fullpath[n+1] = 0;
-		mkdir(fullpath, 0700);
-		make_hash_dirs(fullpath, lvl-1);
-	}
-	fullpath[n+2] = 0;
-}
-
-/*
- * Initialise the cache directory for use
- */
-static void init_cache_dir(const char *cache_path) {
-	char fullpath[MAXPATHLEN];
-	uid_t uid = getuid();
-	mode_t old_umask = umask(077);
-	struct stat buffer;
-
-    snprintf(fullpath, MAXPATHLEN-1, "%s/%d/", cache_path, uid);
-    if (lstat(fullpath, &buffer) != 0) {
-    	// error, create the directory
-        if (mkdir(fullpath, 0700) != 0) {
-        	ea_debug_error("Unable to create cachedir %s\n", fullpath);
-        	return;
-        }
-    } else if (!S_ISDIR(buffer.st_mode)) {
-    	// not a directory
-		ea_debug_error("Cachedir %s exists but is not a directory\n",
-				fullpath);
-		return;
-	}
-
-    // create the hashed dirs
-    make_hash_dirs(fullpath, EACCELERATOR_HASH_LEVEL);
-
-	umask(old_umask);
-
-	ea_mm_instance->cache_dir_uid = uid;
-}
-
-/*
- * Check if the cache dir exists and is world-writable so the forked process
- * can create the cache directories
- */
-static void check_cache_dir(const char *cache_path) {
-	struct stat buffer;
-	mode_t old_umask = umask(0);
-
-	int status = stat(cache_path, &buffer);
-
-	if (status == 0) {
-		// check permissions
-		if (buffer.st_mode != 777) {
-			status = chmod(cache_path, 0777);
-			if (status < 0) {
-				ea_debug_error(
-					"eAccelerator: Unable to change cache directory %s permissions\n",
-					cache_path);
-			}
-		}
-	} else {
-		// create the cache directory if possible
-		status = mkdir(cache_path, 0777);
-		if (status < 0) {
-			ea_debug_error("eAccelerator: Unable to create cache directory %s\n", cache_path);
-		}
-	}
-
-	umask(old_umask);
-}
-
 PHP_MINIT_FUNCTION(eaccelerator) {
   if (type == MODULE_PERSISTENT) {
 #ifndef ZEND_WIN32
@@ -1766,23 +1442,12 @@ PHP_MINIT_FUNCTION(eaccelerator) {
   ZEND_INIT_MODULE_GLOBALS(eaccelerator, eaccelerator_init_globals, NULL);
   REGISTER_INI_ENTRIES();
   REGISTER_STRING_CONSTANT("EACCELERATOR_VERSION", EACCELERATOR_VERSION, CONST_CS | CONST_PERSISTENT);
-  REGISTER_LONG_CONSTANT("EACCELERATOR_SHM_AND_DISK", ea_shm_and_disk, CONST_CS | CONST_PERSISTENT);
-  REGISTER_LONG_CONSTANT("EACCELERATOR_SHM", ea_shm, CONST_CS | CONST_PERSISTENT);
-  REGISTER_LONG_CONSTANT("EACCELERATOR_SHM_ONLY", ea_shm_only, CONST_CS | CONST_PERSISTENT);
-  REGISTER_LONG_CONSTANT("EACCELERATOR_DISK_ONLY", ea_disk_only, CONST_CS | CONST_PERSISTENT);
-  REGISTER_LONG_CONSTANT("EACCELERATOR_NONE", ea_none, CONST_CS | CONST_PERSISTENT);
   encode_version(EACCELERATOR_VERSION, &binary_eaccelerator_version[0], &binary_eaccelerator_version[1]);
   encode_version(PHP_VERSION, &binary_php_version[0], &binary_php_version[1]);
   encode_version(ZEND_VERSION, &binary_zend_version[0], &binary_zend_version[1]);
   ea_is_extension = 1;
 
   ea_debug_init(TSRMLS_C);
-
-#ifndef ZEND_WIN32
-  if (!ea_scripts_shm_only) {
-	  check_cache_dir(EAG(cache_dir));
-  }
-#endif
 
   if (type == MODULE_PERSISTENT &&
       strcmp(sapi_module.name, "cgi") != 0 &&
@@ -1877,25 +1542,6 @@ PHP_RINIT_FUNCTION(eaccelerator)
 #endif
 
 	DBG(ea_debug_printf, (EA_DEBUG, "[%d] Leave RINIT\n",getpid()));
-
-#ifndef ZEND_WIN32
-	if (!ea_scripts_shm_only && ea_mm_instance->cache_dir_uid != getuid()) {
-		// lock this operation with a global eA lock and do the check again
-		// to avoid multiple calls during startup
-		EACCELERATOR_LOCK_RW();
-		if (ea_mm_instance->cache_dir_uid != getuid()) {
-			init_cache_dir(EAG(cache_dir));
-		}
-		EACCELERATOR_UNLOCK();
-	}
-#else
-	if(!ea_scripts_shm_only) {
-		char fullpath[MAXPATHLEN];
-
-		snprintf(fullpath, MAXPATHLEN-1, "%s/", EAG(cache_dir));
-		make_hash_dirs(fullpath, EACCELERATOR_HASH_LEVEL);
-	}
-#endif
 
 	return SUCCESS;
 }

@@ -44,9 +44,6 @@
 
 extern eaccelerator_mm *ea_mm_instance;
 
-/* for checking if shm_only storage */
-extern zend_bool ea_scripts_shm_only;
-
 /* {{{ isAdminAllowed(): check if the admin functions are allowed for the calling script */
 static int isAdminAllowed(TSRMLS_D) {
     const char *filename = zend_get_executed_filename(TSRMLS_C);
@@ -302,10 +299,6 @@ PHP_FUNCTION(eaccelerator_clear)
 	}
 	EACCELERATOR_UNLOCK_RW ();
 	EACCELERATOR_PROTECT ();
-
-	if(!ea_scripts_shm_only) {
-		clear_filecache(EAG(cache_dir));
-    }
 
     RETURN_NULL();
 }

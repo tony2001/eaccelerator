@@ -333,21 +333,8 @@ typedef struct {
 	unsigned int rem_cnt;
 	time_t last_prune;
 	ea_cache_entry *removed;
-	uid_t cache_dir_uid;
-
 	ea_cache_entry *hash[EA_HASH_SIZE];
 } eaccelerator_mm;
-
-/*
- * Where to cache
- */
-typedef enum _ea_cache_place {
-	ea_shm_and_disk,	/* in shm and in disk */
-	ea_shm,				/* in shm, but if it is not possible then on disk */
-	ea_shm_only,		/* in shm only  */
-	ea_disk_only,		/* on disk only */
-	ea_none				/* don't cache  */
-} ea_cache_place;
 
 typedef union align_union {
   double d;
@@ -386,7 +373,6 @@ void eaccelerator_prune (time_t t);
 void *eaccelerator_malloc2 (size_t size TSRMLS_DC);
 
 unsigned int eaccelerator_crc32 (const char *p, size_t n);
-int eaccelerator_md5 (char *s, const char *prefix, const char *key TSRMLS_DC); 
 
 #  ifdef WITH_EACCELERATOR_OPTIMIZER
 void eaccelerator_optimize (zend_op_array * op_array);
@@ -414,7 +400,6 @@ zend_bool optimizer_enabled;
 zend_bool check_mtime_enabled;
 zend_bool compiler;
 zend_bool in_request;
-char *cache_dir;
 char *ea_log_file;
 char *mem;
 char *allowed_admin_path;

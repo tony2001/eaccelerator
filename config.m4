@@ -45,7 +45,7 @@ if test "$PHP_EACCELERATOR" != "no"; then
       AC_DEFINE(HAVE_MPROTECT, 1, [Define if you have mprotect function])
   ])
 
-  eac_sources="eaccelerator.c ea_info.c ea_restore.c ea_store.c mm.c fnmatch.c opcodes.c"
+  eac_sources="eaccelerator.c ea_info.c ea_restore.c ea_store.c mm.c fnmatch.c opcodes.c debug.c"
   
   if test "$PHP_EACCELERATOR_DOC_COMMENT_INCLUSION" = "yes"; then
     AC_DEFINE(INCLUDE_DOC_COMMENTS, 1, [If you want eAccelerator to retain doc-comments in internal php structures (meta-programming)])

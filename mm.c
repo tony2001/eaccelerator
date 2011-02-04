@@ -252,7 +252,6 @@ typedef struct mm_mutex {
 } mm_mutex;
 
 static int mm_init_lock(const char* key, mm_mutex* lock) {
-  int res;
   pthread_rwlockattr_t attr;
 
   if (pthread_rwlockattr_init(&attr) != 0) {

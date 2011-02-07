@@ -129,38 +129,40 @@ static ea_cache_entry* hash_find_mm(const char *key, struct stat *buf, int *nrel
   p = ea_mm_instance->hash[slot];
   while (p != NULL) {
     if (p->hv == hv && 
-				p->realfilename_len == key_len && 
-				memcmp(p->realfilename, key, key_len) == 0) {
-			if (p->removed) {
-				continue;
-			}
+        p->realfilename_len == key_len && 
+        memcmp(p->realfilename, key, key_len) == 0) {
+      if (p->removed) {
+        q = p;
+        p = p->next;
+        continue;
+      }
 
       if (EAG(check_mtime_enabled) && 
-					ea_mm_instance->check_mtime_enabled &&
+          ea_mm_instance->check_mtime_enabled &&
           (buf->st_mtime != p->mtime || buf->st_size != p->filesize)) {
 
         /* the key is invalid, mark it so  */
         *nreloads = p->nreloads + 1;
-				p->removed = 1;
-				atomic_fetch_add(&ea_mm_instance->rem_cnt, 1);
+        p->removed = 1;
+        atomic_fetch_add(&ea_mm_instance->rem_cnt, 1);
 
-				/* don't touch this, we'll do it on request shutdown
-					 if (q == NULL) {
-					   ea_mm_instance->hash[slot] = p->next;
-					 } else {
-					   q->next = p->next;
-					 }
-					 ea_mm_instance->hash_cnt--; 
-					 p->next = ea_mm_instance->removed; 
-					 ea_mm_instance->removed = p;
-					 ea_mm_instance->rem_cnt++; */
+        /* don't touch this, we'll do it on request shutdown
+           if (q == NULL) {
+             ea_mm_instance->hash[slot] = p->next;
+           } else {
+             q->next = p->next;
+           }
+           ea_mm_instance->hash_cnt--; 
+           p->next = ea_mm_instance->removed; 
+           ea_mm_instance->removed = p;
+           ea_mm_instance->rem_cnt++; */
 
-				EACCELERATOR_UNLOCK_RD();
-				return NULL;
+        EACCELERATOR_UNLOCK_RD();
+        return NULL;
       } else {
         /* key is valid */
-				atomic_fetch_add(&p->nhits, 1);
-				atomic_fetch_add(&p->use_cnt, 1);
+        atomic_fetch_add(&p->nhits, 1);
+        atomic_fetch_add(&p->use_cnt, 1);
         p->ttl = ttl;
         EACCELERATOR_UNLOCK_RD();
         return p;
@@ -190,9 +192,16 @@ static void hash_add_mm(ea_cache_entry *x) /* {{{ */
   p = x->next;
   while (p != NULL) {
     if (p->hv == x->hv && p->realfilename_len == x->realfilename_len && memcmp(p->realfilename, x->realfilename, p->realfilename_len) == 0) {
+      if (p->removed) {
+        q = p;
+        p = p->next;
+        continue;
+      }
       q->next = p->next;
       ea_mm_instance->hash_cnt--;
-      ea_mm_instance->hash[slot]->nreloads += p->nreloads;
+      if (ea_mm_instance->hash[slot] != p) {
+        ea_mm_instance->hash[slot]->nreloads += p->nreloads;
+      }
       if (p->use_cnt > 0) {
         /* key is used by other process/thread. Shedule it to remove */
         p->removed = 1;
@@ -1305,21 +1314,24 @@ static void eaccelerator_clean_request(TSRMLS_D) {
 					while (e != NULL) {
 						ea_cache_entry *r = e;
 						e = e->next;
-						ea_mm_instance->hash_cnt--;
 						if (r->removed && r->use_cnt <= 0) {
 							if (q == NULL) {
-								ea_mm_instance->hash[i] = e->next;
+								ea_mm_instance->hash[i] = r->next;
 							} else {
-								q->next = e->next;
+								q->next = r->next;
 							}
 							eaccelerator_free_nolock (r);
-							ea_mm_instance->rem_cnt--;
+						  ea_mm_instance->hash_cnt--;
+							if (--ea_mm_instance->rem_cnt == 0) {
+								goto cleanup_finished;
+							}
 						} else {
-							q = e;
+							q = r;
 						}
 					}
 				}
 			}
+cleanup_finished:
       EACCELERATOR_UNLOCK_RW();
     }
     EACCELERATOR_PROTECT();
@@ -1640,9 +1652,8 @@ function_entry eaccelerator_functions[] = {
   PHP_FE(eaccelerator_cached_scripts, NULL)
   PHP_FE(eaccelerator_removed_scripts, NULL)
   PHP_FE(eaccelerator_check_mtime, NULL)
-  #ifdef WITH_EACCELERATOR_OPTIMIZER
+#ifdef WITH_EACCELERATOR_OPTIMIZER
   PHP_FE(eaccelerator_optimizer, NULL)
-  #endif
 #endif
 #ifdef WITH_EACCELERATOR_DISASSEMBLER
   PHP_FE(eaccelerator_dasm_file, NULL)

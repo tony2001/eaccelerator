@@ -1488,9 +1488,7 @@ ZEND_INI_ENTRY1("eaccelerator.debug",           "1", PHP_INI_SYSTEM, eaccelerato
 STD_PHP_INI_ENTRY("eaccelerator.log_file",      "", PHP_INI_SYSTEM, OnUpdateString, ea_log_file, zend_eaccelerator_globals, eaccelerator_globals)
 STD_PHP_INI_ENTRY("eaccelerator.check_mtime",     "1", PHP_INI_SYSTEM, OnUpdateBool, check_mtime_enabled, zend_eaccelerator_globals, eaccelerator_globals)
 ZEND_INI_ENTRY1("eaccelerator.shm_only",        "0", PHP_INI_SYSTEM, eaccelerator_OnUpdateBool, &ea_scripts_shm_only)
-#ifdef WITH_EACCELERATOR_INFO
 STD_PHP_INI_ENTRY("eaccelerator.allowed_admin_path",       "", PHP_INI_SYSTEM, OnUpdateString, allowed_admin_path, zend_eaccelerator_globals, eaccelerator_globals)
-#endif
 STD_PHP_INI_ENTRY("eaccelerator.cache_dir",      "/tmp/eaccelerator", PHP_INI_SYSTEM, OnUpdateString, cache_dir, zend_eaccelerator_globals, eaccelerator_globals)
 PHP_INI_ENTRY("eaccelerator.filter",             "",  PHP_INI_ALL, eaccelerator_filter)
 PHP_INI_END()
@@ -1955,7 +1953,6 @@ ZEND_BEGIN_ARG_INFO(eaccelerator_second_arg_force_ref, 0)
 ZEND_END_ARG_INFO();
 
 function_entry eaccelerator_functions[] = {
-#ifdef WITH_EACCELERATOR_INFO
   PHP_FE(eaccelerator_caching, NULL)
   PHP_FE(eaccelerator_clear, NULL)
   PHP_FE(eaccelerator_clean, NULL)

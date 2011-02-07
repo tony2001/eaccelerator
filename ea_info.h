@@ -28,8 +28,6 @@
 #ifndef INCLUDED_INFO_H
 #define INCLUDED_INFO_H
 
-#ifdef WITH_EACCELERATOR_INFO
-
 PHP_FUNCTION(eaccelerator_caching);
 #ifdef WITH_EACCELERATOR_OPTIMIZER
 PHP_FUNCTION(eaccelerator_optimizer);
@@ -42,7 +40,6 @@ PHP_FUNCTION(eaccelerator_purge);
 PHP_FUNCTION(eaccelerator_cached_scripts);
 PHP_FUNCTION(eaccelerator_removed_scripts);
 
-#endif
 #endif /* INCLUDED_INFO_H */
 
 /*

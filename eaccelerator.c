@@ -1288,58 +1288,68 @@ static void eaccelerator_clean_request(TSRMLS_D) {
   if (ea_mm_instance != NULL) {
     EACCELERATOR_UNPROTECT();
     if (p != NULL) {
-      EACCELERATOR_LOCK_RW();
-      while (p != NULL) {
-        p->entry->use_cnt--;
-        if (p->entry->removed && p->entry->use_cnt <= 0) {
-          if (ea_mm_instance->removed == p->entry) {
-            ea_mm_instance->removed = p->entry->next;
-            ea_mm_instance->rem_cnt--;
-            eaccelerator_free_nolock(p->entry);
-            p->entry = NULL;
-          } else {
-            q = ea_mm_instance->removed;
-            while (q != NULL && q->next != p->entry) {
-              q = q->next;
-            }
-            if (q != NULL) {
-              q->next = p->entry->next;
+      /* we know for sure there are no removed entries */
+      if (ea_mm_instance->rem_cnt <= 0) {
+        EACCELERATOR_LOCK_RD();
+        while (p != NULL) {
+          atomic_fetch_add(&p->entry->use_cnt, -1);
+          p = p->next;
+        }
+        EACCELERATOR_UNLOCK_RD();
+      } else {
+        EACCELERATOR_LOCK_RW();
+        while (p != NULL) {
+          p->entry->use_cnt--;
+          if (p->entry->removed && p->entry->use_cnt <= 0) {
+            if (ea_mm_instance->removed == p->entry) {
+              ea_mm_instance->removed = p->entry->next;
               ea_mm_instance->rem_cnt--;
               eaccelerator_free_nolock(p->entry);
               p->entry = NULL;
+            } else {
+              q = ea_mm_instance->removed;
+               while (q != NULL && q->next != p->entry) {
+                q = q->next;
+              }
+              if (q != NULL) {
+                q->next = p->entry->next;
+                ea_mm_instance->rem_cnt--;
+                eaccelerator_free_nolock(p->entry);
+                p->entry = NULL;
+              }
             }
           }
+          p = p->next;
         }
-        p = p->next;
-      }
 
-			/* remove all entries marked as removed */
-			if (ea_mm_instance->rem_cnt > 0) {
-				for (i = 0; i < EA_HASH_SIZE; i++) {
-					e = ea_mm_instance->hash[i];
-					q = NULL;
-					while (e != NULL) {
-						ea_cache_entry *r = e;
-						e = e->next;
-						if (r->removed && r->use_cnt <= 0) {
-							if (q == NULL) {
-								ea_mm_instance->hash[i] = r->next;
-							} else {
-								q->next = r->next;
-							}
-							eaccelerator_free_nolock (r);
-						  ea_mm_instance->hash_cnt--;
-							if (--ea_mm_instance->rem_cnt == 0) {
-								goto cleanup_finished;
-							}
-						} else {
-							q = r;
-						}
-					}
-				}
-			}
+  			/* remove all entries marked as removed */
+  			if (ea_mm_instance->rem_cnt > 0) {
+	  			for (i = 0; i < EA_HASH_SIZE; i++) {
+		  			e = ea_mm_instance->hash[i];
+			  		q = NULL;
+				  	while (e != NULL) {
+  						ea_cache_entry *r = e;
+	  					e = e->next;
+		  				if (r->removed && r->use_cnt <= 0) {
+		 	  				if (q == NULL) {
+				  				ea_mm_instance->hash[i] = r->next;
+					  		} else {
+						  		q->next = r->next;
+  							}
+	  						eaccelerator_free_nolock (r);
+		  				  ea_mm_instance->hash_cnt--;
+			 	  			if (--ea_mm_instance->rem_cnt == 0) {
+			  					goto cleanup_finished;
+					  		}
+  						} else {
+	  						q = r;
+  						}
+	  				}
+  				}
+			  }
 cleanup_finished:
-      EACCELERATOR_UNLOCK_RW();
+        EACCELERATOR_UNLOCK_RW();
+      }
     }
     EACCELERATOR_PROTECT();
     p = (ea_used_entry*)EAG(used_entries);
@@ -2001,5 +2011,5 @@ static void register_eaccelerator_as_zend_extension() {
  * tab-width: 2
  * c-basic-offset: 2
  * End:
- * vim: noet sw=2 ts=2 fdm=marker
+ * vim: et sw=2 ts=2 fdm=marker
  */

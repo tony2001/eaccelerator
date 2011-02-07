@@ -99,6 +99,21 @@ dnl Test for union semun
   msg=yes,msg=no)
   AC_MSG_RESULT([$msg])
 
+  AC_MSG_CHECKING([if gcc supports __sync_bool_compare_and_swap])
+  AC_TRY_LINK(,
+  [
+    int variable = 1;
+    return (__sync_bool_compare_and_swap(&variable, 1, 2)
+           && __sync_add_and_fetch(&variable, 1)) ? 1 : 0;
+  ],
+  [
+    AC_MSG_RESULT([yes])
+    AC_DEFINE(HAVE_BUILTIN_ATOMIC, 1, [Define to 1 if gcc supports __sync_bool_compare_and_swap() a.o.])
+  ],
+  [
+    AC_MSG_RESULT([no])
+  ])
+
   mm_shm_sysvipc=no
   mm_shm_mmap_anon=no
   mm_shm_mmap_zero=no

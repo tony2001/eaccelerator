@@ -41,6 +41,7 @@
 #include "ea_restore.h"
 #include "ea_info.h"
 #include "ea_dasm.h"
+#include "ea_atomic.h"
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -114,10 +115,8 @@ ZEND_DLEXPORT zend_op_array* eaccelerator_compile_file(zend_file_handle *file_ha
 /******************************************************************************/
 
 /* Find a script entry with the given hash key */
-static ea_cache_entry* hash_find_mm(const char  *key,
-                                    struct stat *buf,
-                                    int         *nreloads,
-                                    time_t      ttl TSRMLS_DC) {
+static ea_cache_entry* hash_find_mm(const char *key, struct stat *buf, int *nreloads, time_t ttl TSRMLS_DC) /* {{{ */
+{
   unsigned int hv, slot;
   ea_cache_entry *p, *q;
   int key_len = strlen(key);
@@ -125,53 +124,59 @@ static ea_cache_entry* hash_find_mm(const char  *key,
   hv = zend_get_hash_value((char *)key, strlen(key));
   slot = hv & EA_HASH_MAX;
 
-  EACCELERATOR_LOCK_RW();
+  EACCELERATOR_LOCK_RD();
   q = NULL;
   p = ea_mm_instance->hash[slot];
   while (p != NULL) {
-    if (p->hv == hv && p->realfilename_len == key_len && memcmp(p->realfilename, key, key_len) == 0) {
-      if (EAG(check_mtime_enabled) && ea_mm_instance->check_mtime_enabled &&
+    if (p->hv == hv && 
+				p->realfilename_len == key_len && 
+				memcmp(p->realfilename, key, key_len) == 0) {
+			if (p->removed) {
+				continue;
+			}
+
+      if (EAG(check_mtime_enabled) && 
+					ea_mm_instance->check_mtime_enabled &&
           (buf->st_mtime != p->mtime || buf->st_size != p->filesize)) {
-        /* key is invalid. Remove it. */
-        *nreloads = p->nreloads+1;
-        if (q == NULL) {
-          ea_mm_instance->hash[slot] = p->next;
-        } else {
-          q->next = p->next;
-        }
-        ea_mm_instance->hash_cnt--;
-        if (p->use_cnt > 0) {
-          /* key is used by other process/thread. Schedule it for removal */
-          p->removed = 1;
-          p->next = ea_mm_instance->removed;
-          ea_mm_instance->removed = p;
-          ea_mm_instance->rem_cnt++;
-          EACCELERATOR_UNLOCK_RW();
-          return NULL;
-        } else {
-          /* key is unused. Remove it. */
-          eaccelerator_free_nolock(p);
-          EACCELERATOR_UNLOCK_RW();
-          return NULL;
-        }
+
+        /* the key is invalid, mark it so  */
+        *nreloads = p->nreloads + 1;
+				p->removed = 1;
+				atomic_fetch_add(&ea_mm_instance->rem_cnt, 1);
+
+				/* don't touch this, we'll do it on request shutdown
+					 if (q == NULL) {
+					   ea_mm_instance->hash[slot] = p->next;
+					 } else {
+					   q->next = p->next;
+					 }
+					 ea_mm_instance->hash_cnt--; 
+					 p->next = ea_mm_instance->removed; 
+					 ea_mm_instance->removed = p;
+					 ea_mm_instance->rem_cnt++; */
+
+				EACCELERATOR_UNLOCK_RD();
+				return NULL;
       } else {
         /* key is valid */
-        p->nhits++;
-        p->use_cnt++;
+				atomic_fetch_add(&p->nhits, 1);
+				atomic_fetch_add(&p->use_cnt, 1);
         p->ttl = ttl;
-        EACCELERATOR_UNLOCK_RW();
+        EACCELERATOR_UNLOCK_RD();
         return p;
       }
     }
     q = p;
     p = p->next;
   }
-  EACCELERATOR_UNLOCK_RW();
+  EACCELERATOR_UNLOCK_RD();
   return NULL;
 }
+/* }}} */
 
 /* Add a new entry to the hashtable */
-static void hash_add_mm(ea_cache_entry *x) {
+static void hash_add_mm(ea_cache_entry *x) /* {{{ */
+{
   ea_cache_entry *p,*q;
   unsigned int slot;
   x->hv = zend_get_hash_value(x->realfilename, x->realfilename_len);
@@ -208,6 +213,7 @@ static void hash_add_mm(ea_cache_entry *x) {
   }
   EACCELERATOR_UNLOCK_RW();
 }
+/* }}} */
 
 /* Initialise the shared memory */
 static int init_mm(TSRMLS_D) {
@@ -1262,6 +1268,9 @@ PHP_INI_END()
 
 static void eaccelerator_clean_request(TSRMLS_D) {
   ea_used_entry  *p = (ea_used_entry*)EAG(used_entries);
+	ea_cache_entry *q, *e;
+	int i;
+
   if (ea_mm_instance != NULL) {
     EACCELERATOR_UNPROTECT();
     if (p != NULL) {
@@ -1275,7 +1284,7 @@ static void eaccelerator_clean_request(TSRMLS_D) {
             eaccelerator_free_nolock(p->entry);
             p->entry = NULL;
           } else {
-            ea_cache_entry *q = ea_mm_instance->removed;
+            q = ea_mm_instance->removed;
             while (q != NULL && q->next != p->entry) {
               q = q->next;
             }
@@ -1289,6 +1298,28 @@ static void eaccelerator_clean_request(TSRMLS_D) {
         }
         p = p->next;
       }
+
+			/* remove all entries marked as removed */
+			if (ea_mm_instance->rem_cnt > 0) {
+				for (i = 0; i < EA_HASH_SIZE; i++) {
+					e = ea_mm_instance->hash[i];
+					q = NULL;
+					while (e != NULL) {
+						ea_cache_entry *r = e;
+						e = e->next;
+						ea_mm_instance->hash_cnt--;
+						if (r->removed && r->use_cnt <= 0) {
+							if (q != NULL) {
+								q->next = e->next;
+							}
+							eaccelerator_free_nolock (r);
+							ea_mm_instance->rem_cnt--;
+						} else {
+							q = e;
+						}
+					}
+				}
+			}
       EACCELERATOR_UNLOCK_RW();
     }
     EACCELERATOR_PROTECT();

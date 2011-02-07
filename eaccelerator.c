@@ -1309,7 +1309,9 @@ static void eaccelerator_clean_request(TSRMLS_D) {
 						e = e->next;
 						ea_mm_instance->hash_cnt--;
 						if (r->removed && r->use_cnt <= 0) {
-							if (q != NULL) {
+							if (q == NULL) {
+								ea_mm_instance->hash[i] = e->next;
+							} else {
 								q->next = e->next;
 							}
 							eaccelerator_free_nolock (r);

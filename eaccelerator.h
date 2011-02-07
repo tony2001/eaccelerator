@@ -331,6 +331,7 @@ typedef struct {
 	zend_bool optimizer_enabled;
 	zend_bool check_mtime_enabled;
 	unsigned int rem_cnt;
+	time_t start_time;
 	time_t last_prune;
 	ea_cache_entry *removed;
 	ea_cache_entry *hash[EA_HASH_SIZE];
@@ -426,7 +427,7 @@ void (*original_sigill_handler) (int);
 void (*original_sigabrt_handler) (int);
 #endif
 #endif
-#ifdef DEBUG
+#ifdef WITH_EACCELERATOR_DEBUG
 int xpad;
 int profile_level;
 long self_time[256];

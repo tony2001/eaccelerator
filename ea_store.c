@@ -770,7 +770,7 @@ static ea_class_entry *store_class_entry(char **at, zend_class_entry * from TSRM
     DBG(ea_debug_printf, (EA_DEBUG, "[%d] store_class_entry: %s parent was '%s'\n",
                     getpid(), from->name ? from->name : "(top)",
                     from->parent ? from->parent->name : "NULL"));
-#ifdef DEBUG
+#ifdef WITH_EACCELERATOR_DEBUG
     EAG(xpad)++;
 #endif
 
@@ -829,7 +829,7 @@ static ea_class_entry *store_class_entry(char **at, zend_class_entry * from TSRM
     }
     store_hash(at, &to->function_table, &from->function_table, (store_bucket_t) store_op_array, (check_bucket_t) store_function_inheritance_check, from);
     
-#ifdef DEBUG
+#ifdef WITH_EACCELERATOR_DEBUG
     EAG(xpad)--;
 #endif
 

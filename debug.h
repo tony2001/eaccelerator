@@ -49,7 +49,7 @@
  * The reason why the function arguments are passed by one macro variable is to prevent
  * the use of variadic macros, keeping the win32 VC 6.0 folks happy
  */
-#ifdef DEBUG
+#ifdef WITH_EACCELERATOR_DEBUG
 #define DBG(func, list) func list
 #else
 #define DBG(func, list)

@@ -68,6 +68,7 @@
 #include "ext/standard/info.h"
 #include "ext/standard/php_incomplete_class.h"
 #include "ext/standard/md5.h"
+#include "ext/date/php_date.h"
 
 #include "SAPI.h"
 
@@ -100,7 +101,7 @@ extern dtor_func_t properties_info_dtor;
 /* saved original functions */
 static zend_op_array *(*ea_saved_zend_compile_file)(zend_file_handle *file_handle, int type TSRMLS_DC);
 
-#ifdef DEBUG
+#ifdef WITH_EACCELERATOR_DEBUG
 static void (*ea_saved_zend_execute)(zend_op_array *op_array TSRMLS_DC);
 #endif
 
@@ -257,6 +258,7 @@ static int init_mm(TSRMLS_D) {
   ea_mm_instance->check_mtime_enabled = 1;
   ea_mm_instance->removed = NULL;
   ea_mm_instance->last_prune = time(NULL);	/* this time() call is harmless since this is init phase */
+  ea_mm_instance->start_time = time(NULL);
   EACCELERATOR_PROTECT();
   return SUCCESS;
 }
@@ -334,7 +336,7 @@ void encode_version(const char *str, int *version, int *extra)
     *extra = ((a & 0xf) << 28) | (0x0fffffff & b);
 }
 
-#ifdef DEBUG
+#ifdef WITH_EACCELERATOR_DEBUG
 static void decode_version(int version, int extra, char *str, size_t len)
 {
     int number;
@@ -877,7 +879,7 @@ ZEND_DLEXPORT zend_op_array* eaccelerator_compile_file(zend_file_handle *file_ha
   char  realname[MAXPATHLEN];
   int   nreloads;
   int stat_result = 0;
-#ifdef DEBUG
+#ifdef WITH_EACCELERATOR_DEBUG
   struct timeval tv_start;
 #endif
   int ok_to_cache = 0;
@@ -888,7 +890,7 @@ ZEND_DLEXPORT zend_op_array* eaccelerator_compile_file(zend_file_handle *file_ha
   DBG(ea_debug_start_time, (&tv_start));
   DBG(ea_debug_printf, (EA_DEBUG, "[%d] Enter COMPILE\n",getpid()));
   DBG(ea_debug_printf, (EA_DEBUG, "[%d] compile_file: \"%s\"\n",getpid(), file_handle->filename));
-#ifdef DEBUG
+#ifdef WITH_EACCELERATOR_DEBUG
   EAG(xpad)+=2;
 #endif
 
@@ -904,7 +906,7 @@ ZEND_DLEXPORT zend_op_array* eaccelerator_compile_file(zend_file_handle *file_ha
     t = ea_saved_zend_compile_file(file_handle, type TSRMLS_CC);
     DBG(ea_debug_printf, (EA_TEST_PERFORMANCE, "\t[%d] compile_file: end (%ld)\n", getpid(), ea_debug_elapsed_time(&tv_start)));
     DBG(ea_debug_printf, (EA_DEBUG, "\t[%d] compile_file: end\n", getpid()));
-#ifdef DEBUG
+#ifdef WITH_EACCELERATOR_DEBUG
     EAG(xpad)-=2;
 #endif
     DBG(ea_debug_printf, (EA_DEBUG, "[%d] Leave COMPILE\n", getpid()));
@@ -928,7 +930,7 @@ ZEND_DLEXPORT zend_op_array* eaccelerator_compile_file(zend_file_handle *file_ha
   zend_is_auto_global("_FILES", sizeof("_FILES")-1 TSRMLS_CC);
 
   if (t != NULL) { // restore from cache
-#ifdef DEBUG
+#ifdef WITH_EACCELERATOR_DEBUG
     ea_debug_log("[%d] EACCELERATOR hit: \"%s\"\n", getpid(), t->filename);
 #else
     ea_debug_log("EACCELERATOR hit: \"%s\"\n", t->filename);
@@ -942,7 +944,7 @@ ZEND_DLEXPORT zend_op_array* eaccelerator_compile_file(zend_file_handle *file_ha
 
     DBG(ea_debug_printf, (EA_TEST_PERFORMANCE, "\t[%d] compile_file: restored (%ld)\n", getpid(), ea_debug_elapsed_time(&tv_start)));
     DBG(ea_debug_printf, (EA_DEBUG, "\t[%d] compile_file: restored\n", getpid()));
-#ifdef DEBUG
+#ifdef WITH_EACCELERATOR_DEBUG
     EAG(xpad)-=2;
 #endif
     DBG(ea_debug_printf, (EA_DEBUG, "[%d] Leave COMPILE\n", getpid()));
@@ -961,7 +963,7 @@ ZEND_DLEXPORT zend_op_array* eaccelerator_compile_file(zend_file_handle *file_ha
 		zend_class_entry tmp_class;
 		int ea_bailout;
 
-#ifdef DEBUG
+#ifdef WITH_EACCELERATOR_DEBUG
     ea_debug_printf(EA_DEBUG, "\t[%d] compile_file: marking\n", getpid());
     if (CG(class_table) != EG(class_table)) {
       ea_debug_printf(EA_DEBUG, "\t[%d] oops, CG(class_table)[%08x] != EG(class_table)[%08x]\n", getpid(), CG(class_table), EG(class_table));
@@ -1028,13 +1030,13 @@ ZEND_DLEXPORT zend_op_array* eaccelerator_compile_file(zend_file_handle *file_ha
       class_table_tail = class_table_tail ? class_table_tail->pListNext : CG(class_table)->pListHead;
 
       if (eaccelerator_store(file_handle->opened_path, &buf, nreloads, t, function_table_tail, class_table_tail TSRMLS_CC)) {
-#ifdef DEBUG
+#ifdef WITH_EACCELERATOR_DEBUG
         ea_debug_log("[%d] EACCELERATOR %s: \"%s\"\n", getpid(), (nreloads == 1) ? "cached" : "re-cached", file_handle->opened_path);
 #else
         ea_debug_log("EACCELERATOR %s: \"%s\"\n", (nreloads == 1) ? "cached" : "re-cached", file_handle->opened_path);
 #endif
       } else {
-#ifdef DEBUG
+#ifdef WITH_EACCELERATOR_DEBUG
         ea_debug_log("[%d] EACCELERATOR can't cache: \"%s\"\n", getpid(), file_handle->opened_path);
 #else
         ea_debug_log("EACCELERATOR can't cache: \"%s\"\n", file_handle->opened_path);
@@ -1082,7 +1084,7 @@ ZEND_DLEXPORT zend_op_array* eaccelerator_compile_file(zend_file_handle *file_ha
   }
   DBG(ea_debug_printf, (EA_TEST_PERFORMANCE, "\t[%d] compile_file: end (%ld)\n", getpid(), ea_debug_elapsed_time(&tv_start)));
   DBG(ea_debug_printf, (EA_DEBUG, "\t[%d] compile_file: end\n", getpid()));
-#ifdef DEBUG
+#ifdef WITH_EACCELERATOR_DEBUG
   EAG(xpad)-=2;
 #endif
   DBG(ea_debug_printf, (EA_DEBUG, "[%d] Leave COMPILE\n", getpid()));
@@ -1092,7 +1094,7 @@ ZEND_DLEXPORT zend_op_array* eaccelerator_compile_file(zend_file_handle *file_ha
   return t;
 }
 
-#ifdef DEBUG
+#ifdef WITH_EACCELERATOR_DEBUG
 static void profile_execute(zend_op_array *op_array TSRMLS_DC)
 {
   int i;
@@ -1179,6 +1181,8 @@ PHP_MINFO_FUNCTION(eaccelerator) {
 							(ea_mm_instance != NULL) && ea_mm_instance->check_mtime_enabled)?"true":"false");
   if (ea_mm_instance != NULL) {
     size_t available;
+		char *start_time;
+
     EACCELERATOR_UNPROTECT();
     available = mm_available(ea_mm_instance->mm);
     EACCELERATOR_LOCK_RD();
@@ -1193,6 +1197,9 @@ PHP_MINFO_FUNCTION(eaccelerator) {
     php_info_print_table_row(2, "Cached Scripts", s);
     snprintf(s, 32, "%u", ea_mm_instance->rem_cnt);
     php_info_print_table_row(2, "Removed Scripts", s);
+		start_time = php_format_date("d-M-Y H:i:s", 11, ea_mm_instance->start_time, 1 TSRMLS_CC);
+    php_info_print_table_row(2, "Start time", start_time);
+		efree(start_time);
     EACCELERATOR_UNPROTECT();
     EACCELERATOR_UNLOCK_RD();
     EACCELERATOR_PROTECT();
@@ -1460,7 +1467,7 @@ PHP_MINIT_FUNCTION(eaccelerator) {
     }
     ea_saved_zend_compile_file = zend_compile_file;
 
-#ifdef DEBUG
+#ifdef WITH_EACCELERATOR_DEBUG
     zend_compile_file = profile_compile_file;
     ea_saved_zend_execute = zend_execute;
     zend_execute = profile_execute;
@@ -1516,7 +1523,7 @@ PHP_RINIT_FUNCTION(eaccelerator)
 
 	zend_hash_init(&EAG(restored), 0, NULL, NULL, 0);
 
-#ifdef DEBUG
+#ifdef WITH_EACCELERATOR_DEBUG
 	EAG(xpad) = 0;
 	EAG(profile_level) = 0;
 #endif

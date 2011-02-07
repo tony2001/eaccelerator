@@ -62,7 +62,7 @@ if test "$PHP_EACCELERATOR" != "no"; then
     AC_DEFINE(WITH_EACCELERATOR_DISASSEMBLER, 1, [Define if you like to explore Zend bytecode])
   fi
   if test "$PHP_EACCELERATOR_DEBUG" = "yes"; then
-    AC_DEFINE(DEBUG, 1, [Define if you want to enable eaccelerator debug code])
+    AC_DEFINE(WITH_EACCELERATOR_DEBUG, 1, [Define if you want to enable eaccelerator debug code])
   fi
 
   PHP_NEW_EXTENSION(eaccelerator, $eac_sources, $ext_shared)

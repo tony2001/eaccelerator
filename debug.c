@@ -204,7 +204,7 @@ void ea_debug_log_hashkeys (char *p, HashTable * ht)
  */
 void ea_debug_pad (long debug_level TSRMLS_DC)
 {
-#ifdef DEBUG /* This ifdef is still req'd because xpad is N/A in a non-debug compile */
+#ifdef WITH_EACCELERATOR_DEBUG /* This ifdef is still req'd because xpad is N/A in a non-debug compile */
     if (ea_debug & debug_level) {
 		int i;
         if (F_fp != stderr) {

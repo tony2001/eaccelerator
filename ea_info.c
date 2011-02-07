@@ -289,6 +289,7 @@ PHP_FUNCTION (eaccelerator_info)
 	add_assoc_long(return_value, "memoryAllocated", ea_mm_instance->total - available);
 	add_assoc_long(return_value, "cachedScripts", ea_mm_instance->hash_cnt);
 	add_assoc_long(return_value, "removedScripts", ea_mm_instance->rem_cnt);
+	add_assoc_long(return_value, "start_time", ea_mm_instance->start_time);
 
 	return;
 }

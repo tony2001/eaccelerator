@@ -689,7 +689,7 @@ static zend_class_entry *restore_class_entry(zend_class_entry * to, ea_class_ent
 
     DBG(ea_debug_pad, (EA_DEBUG TSRMLS_CC));
     DBG(ea_debug_printf, (EA_DEBUG, "[%d] restore_class_entry: %s\n", getpid(), from->name ? from->name : "(top)"));
-#ifdef DEBUG
+#ifdef WITH_EACCELERATOR_DEBUG
     EAG(xpad)++;
 #endif
     if (to == NULL) {
@@ -774,7 +774,7 @@ static zend_class_entry *restore_class_entry(zend_class_entry * to, ea_class_ent
     }
     EAG(class_entry) = old;
 
-#ifdef DEBUG
+#ifdef WITH_EACCELERATOR_DEBUG
     EAG(xpad)--;
 #endif
     return to;

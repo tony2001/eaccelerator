@@ -1607,9 +1607,8 @@ function_entry eaccelerator_functions[] = {
   PHP_FE(eaccelerator_cached_scripts, NULL)
   PHP_FE(eaccelerator_removed_scripts, NULL)
   PHP_FE(eaccelerator_check_mtime, NULL)
-  #ifdef WITH_EACCELERATOR_OPTIMIZER
+#ifdef WITH_EACCELERATOR_OPTIMIZER
   PHP_FE(eaccelerator_optimizer, NULL)
-  #endif
 #endif
 #ifdef WITH_EACCELERATOR_DISASSEMBLER
   PHP_FE(eaccelerator_dasm_file, NULL)

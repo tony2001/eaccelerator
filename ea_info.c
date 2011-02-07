@@ -38,8 +38,6 @@
 #  define O_BINARY 0
 #endif
 
-#ifdef WITH_EACCELERATOR_INFO
-
 #define NOT_ADMIN_WARNING "This script isn't in the allowed_admin_path setting!"
 
 extern eaccelerator_mm *ea_mm_instance;
@@ -368,8 +366,6 @@ PHP_FUNCTION(eaccelerator_removed_scripts)
     return;
 }
 /* }}} */
-
-#endif	/* WITH_EACCELERATOR_INFO */
 
 /*
  * Local variables:

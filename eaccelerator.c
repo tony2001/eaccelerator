@@ -575,7 +575,7 @@ static zend_op_array* eaccelerator_restore(char *realname, struct stat *buf,
       return NULL;
     }
     EAG(class_entry) = NULL;
-    op_array = restore_op_array(NULL, p->op_array TSRMLS_CC);
+    op_array = restore_op_array_ptr(p->op_array TSRMLS_CC);
     if (op_array != NULL) {
       ea_fc_entry *e;
       ea_used_entry *used = emalloc(sizeof(ea_used_entry));

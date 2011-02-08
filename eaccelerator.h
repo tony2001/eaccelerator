@@ -220,7 +220,10 @@ typedef struct _eaccelerator_op_array {
 	zend_arg_info *arg_info;
 	zend_bool pass_rest_by_reference;
 	char *function_name;
+	char *function_name_lc;
+	int function_name_len;
 	char *scope_name;
+	char *scope_name_lc;
 	int scope_name_len;
 	zend_uint fn_flags;
 	zend_op *opcodes;

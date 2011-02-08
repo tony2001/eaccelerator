@@ -81,13 +81,13 @@ typedef void (*fixup_bucket_t) (char *, void *TSRMLS_DC);
 #define fixup_zval_hash(base, from) \
     fixup_hash(base, from, (fixup_bucket_t)fixup_zval TSRMLS_CC)
 
-static void fixup_property_info(char *base, zend_property_info * from TSRMLS_DC)
+static inline void fixup_property_info(char *base, zend_property_info * from TSRMLS_DC)
 {
     FIXUP(base, from->name);
     FIXUP(base, from->doc_comment);
 }
 
-static void fixup_hash(char *base, HashTable * source,
+static inline void fixup_hash(char *base, HashTable * source,
                        fixup_bucket_t fixup_bucket TSRMLS_DC)
 {
     unsigned int i;
@@ -123,7 +123,7 @@ static void fixup_hash(char *base, HashTable * source,
     }
 }
 
-void fixup_zval(char *base, zval * zv TSRMLS_DC)
+static inline void fixup_zval(char *base, zval * zv TSRMLS_DC)
 {
     switch (EA_ZV_TYPE_P(zv)) {
         case IS_CONSTANT:           /* fallthrough */
@@ -143,7 +143,7 @@ void fixup_zval(char *base, zval * zv TSRMLS_DC)
     }
 }
 
-static void fixup_op_array(char *base, ea_op_array * from TSRMLS_DC)
+static inline void fixup_op_array(char *base, ea_op_array * from TSRMLS_DC)
 {
     zend_op *opline;
     zend_op *end;
@@ -157,7 +157,9 @@ static void fixup_op_array(char *base, ea_op_array * from TSRMLS_DC)
         }
     }
     FIXUP(base, from->function_name);
+    FIXUP(base, from->function_name_lc);
     FIXUP(base, from->scope_name);
+    FIXUP(base, from->scope_name_lc);
     if (from->type == ZEND_INTERNAL_FUNCTION) {
         return;
     }
@@ -215,7 +217,7 @@ static void fixup_op_array(char *base, ea_op_array * from TSRMLS_DC)
 #endif
 }
 
-static void fixup_class_entry(char *base, ea_class_entry *from TSRMLS_DC)
+static inline void fixup_class_entry(char *base, ea_class_entry *from TSRMLS_DC)
 {
     FIXUP(base, from->name);
     FIXUP(base, from->parent);
@@ -234,6 +236,7 @@ static void fixup_class_entry(char *base, ea_class_entry *from TSRMLS_DC)
     fixup_hash(base, &from->function_table,(fixup_bucket_t) fixup_op_array TSRMLS_CC);
 }
 
+#if 0
 void eaccelerator_fixup(ea_cache_entry *p TSRMLS_DC)
 {
     ea_fc_entry *q;
@@ -260,6 +263,7 @@ void eaccelerator_fixup(ea_cache_entry *p TSRMLS_DC)
         q = q->next;
     }
 }
+#endif
 
 /******************************************************************************/
 /* Functions to restore a php script from shared memory                       */
@@ -267,10 +271,40 @@ void eaccelerator_fixup(ea_cache_entry *p TSRMLS_DC)
 
 typedef void *(*restore_bucket_t) (void *TSRMLS_DC);
 
+static inline zval *restore_zval_ptr(zval * from TSRMLS_DC);
+static inline HashTable *restore_hash(HashTable * target, HashTable * source, restore_bucket_t copy_bucket TSRMLS_DC);
+
 #define restore_zval_hash(target, source) \
     restore_hash(target, source, (restore_bucket_t)restore_zval_ptr TSRMLS_CC)
 
-static zval *restore_zval_ptr(zval * from TSRMLS_DC)
+static inline void restore_zval(zval * zv TSRMLS_DC)
+{
+    switch (EA_ZV_TYPE_P(zv)) {
+    case IS_CONSTANT:
+    case IS_OBJECT:
+    case IS_STRING:
+        if (Z_STRVAL_P(zv) == NULL || Z_STRVAL_P(zv)[0] == '\0' || Z_STRLEN_P(zv) == 0) {
+            Z_STRLEN_P(zv) = 0;
+            Z_STRVAL_P(zv) = empty_string;
+            return;
+        } else {
+            char *p = emalloc(Z_STRLEN_P(zv) + 1);
+            memcpy(p, Z_STRVAL_P(zv), Z_STRLEN_P(zv) + 1);
+            Z_STRVAL_P(zv) = p;
+        }
+        return;
+
+    case IS_ARRAY:
+    case IS_CONSTANT_ARRAY:
+        if (Z_ARRVAL_P(zv) != NULL && Z_ARRVAL_P(zv) != &EG(symbol_table)) {
+            Z_ARRVAL_P(zv) = restore_zval_hash(NULL, Z_ARRVAL_P(zv));
+            Z_ARRVAL_P(zv)->pDestructor = ZVAL_PTR_DTOR;
+        }
+        return;
+    }
+}
+
+static inline zval *restore_zval_ptr(zval * from TSRMLS_DC)
 {
     zval *p;
     ALLOC_ZVAL(p);
@@ -285,7 +319,7 @@ static zval *restore_zval_ptr(zval * from TSRMLS_DC)
     return p;
 }
 
-static HashTable *restore_hash(HashTable * target, HashTable * source,
+static inline HashTable *restore_hash(HashTable * target, HashTable * source,
                                restore_bucket_t copy_bucket TSRMLS_DC)
 {
     Bucket *p, *np, *prev_p;
@@ -350,32 +384,6 @@ static HashTable *restore_hash(HashTable * target, HashTable * source,
     return target;
 }
 
-void restore_zval(zval * zv TSRMLS_DC)
-{
-    switch (EA_ZV_TYPE_P(zv)) {
-    case IS_CONSTANT:
-    case IS_OBJECT:
-    case IS_STRING:
-        if (Z_STRVAL_P(zv) == NULL || Z_STRVAL_P(zv)[0] == '\0' || Z_STRLEN_P(zv) == 0) {
-            Z_STRLEN_P(zv) = 0;
-            Z_STRVAL_P(zv) = empty_string;
-            return;
-        } else {
-            char *p = emalloc(Z_STRLEN_P(zv) + 1);
-            memcpy(p, Z_STRVAL_P(zv), Z_STRLEN_P(zv) + 1);
-            Z_STRVAL_P(zv) = p;
-        }
-        return;
-
-    case IS_ARRAY:
-    case IS_CONSTANT_ARRAY:
-        if (Z_ARRVAL_P(zv) != NULL && Z_ARRVAL_P(zv) != &EG(symbol_table)) {
-            Z_ARRVAL_P(zv) = restore_zval_hash(NULL, Z_ARRVAL_P(zv));
-            Z_ARRVAL_P(zv)->pDestructor = ZVAL_PTR_DTOR;
-        }
-        return;
-    }
-}
 
 static void call_op_array_ctor_handler(zend_extension * extension,
                                        zend_op_array * op_array TSRMLS_DC)
@@ -385,7 +393,7 @@ static void call_op_array_ctor_handler(zend_extension * extension,
     }
 }
 
-zend_op_array *restore_op_array(zend_op_array * to, ea_op_array * from TSRMLS_DC)
+static inline zend_op_array *restore_op_array(zend_op_array * to, ea_op_array * from TSRMLS_DC)
 {
     union {
         zend_function *v;
@@ -420,10 +428,8 @@ zend_op_array *restore_op_array(zend_op_array * to, ea_op_array * from TSRMLS_DC
     to->pass_rest_by_reference = from->pass_rest_by_reference;
     to->function_name = from->function_name;
 
-    if (to->function_name) {
-        fname_len = strlen(to->function_name);
-        fname_lc = zend_str_tolower_dup(to->function_name, fname_len);
-    }
+    fname_len = from->function_name_len;
+    fname_lc = from->function_name_lc;
 
     to->fn_flags = from->fn_flags;
 
@@ -451,7 +457,7 @@ zend_op_array *restore_op_array(zend_op_array * to, ea_op_array * from TSRMLS_DC
             zend_class_entry *v;
             void *ptr;
         } scope;
-        char *from_scope_lc = zend_str_tolower_dup(from->scope_name, from->scope_name_len);
+        char *from_scope_lc = from->scope_name_lc;
         scope.v = to->scope;
         if (zend_hash_find (CG(class_table), (void *) from_scope_lc, from->scope_name_len + 1, &scope.ptr) == SUCCESS &&
                 to->scope != NULL) {
@@ -464,7 +470,6 @@ zend_op_array *restore_op_array(zend_op_array * to, ea_op_array * from TSRMLS_DC
             DBG(ea_debug_printf, (EA_DEBUG, "[%d]                   can't find '%s' in class_table. use EAG(class_entry).\n", getpid(), from->scope_name));
             to->scope = EAG(class_entry);
         }
-        efree(from_scope_lc);
     } else {
         DBG(ea_debug_pad, (EA_DEBUG TSRMLS_CC));
         DBG(ea_debug_printf, (EA_DEBUG, "[%d]                   from is NULL\n", getpid()));
@@ -513,19 +518,11 @@ zend_op_array *restore_op_array(zend_op_array * to, ea_op_array * from TSRMLS_DC
             DBG(ea_debug_pad, (EA_DEBUG TSRMLS_CC));
             DBG(ea_debug_printf, (EA_DEBUG, "[%d]                                       can't find\n", getpid()));
         }       
-        /* hrak: slight memleak here. dont forget to free the lowercase function name! */
-        if (fname_lc != NULL) {
-            efree(fname_lc);
-        }
         /* zend_internal_function also contains return_reference in ZE2 */
         to->return_reference = from->return_reference;
         /* this gets set by zend_do_inheritance */
         to->prototype = NULL;
         return to;
-    }
-    /* hrak: slight memleak here. dont forget to free the lowercase function name! */
-    if (fname_lc != NULL) {
-        efree(fname_lc);
     }
     to->opcodes = from->opcodes;
     to->last = to->size = from->last;
@@ -575,12 +572,12 @@ zend_op_array *restore_op_array(zend_op_array * to, ea_op_array * from TSRMLS_DC
     return to;
 }
 
-static zend_op_array *restore_op_array_ptr(ea_op_array *from TSRMLS_DC)
+zend_op_array *restore_op_array_ptr(ea_op_array *from TSRMLS_DC)
 {
     return restore_op_array(NULL, from TSRMLS_CC);
 }
 
-static zend_property_info *restore_property_info(zend_property_info *
+static inline zend_property_info *restore_property_info(zend_property_info *
                                                  from TSRMLS_DC)
 {
     zend_property_info *to = emalloc(sizeof(zend_property_info));
@@ -600,7 +597,7 @@ static zend_property_info *restore_property_info(zend_property_info *
 }
 
 /* restore the parent class with the given name for the given class */
-static void restore_class_parent(char *parent, int len, zend_class_entry * to TSRMLS_DC)
+static inline void restore_class_parent(char *parent, int len, zend_class_entry * to TSRMLS_DC)
 {
     zend_class_entry** parent_ptr = NULL;
     if (zend_lookup_class(parent, len, &parent_ptr TSRMLS_CC) != SUCCESS)
@@ -615,12 +612,10 @@ static void restore_class_parent(char *parent, int len, zend_class_entry * to TS
     }
 }
 
-static void restore_class_methods(zend_class_entry * to TSRMLS_DC)
+static inline void restore_class_methods(zend_class_entry * to TSRMLS_DC)
 {
-    int cname_len = to->name_length;
-    char *cname_lc = zend_str_tolower_dup(to->name, cname_len);
+	char *fname, *fname_lc;
     int fname_len = 0;
-    char *fname_lc = NULL;
     zend_function *f = NULL;
     Bucket *p = to->function_table.pListHead;
 
@@ -629,13 +624,17 @@ static void restore_class_methods(zend_class_entry * to TSRMLS_DC)
     while (p != NULL) {
         f = p->pData;
         fname_len = strlen(f->common.function_name);
-        fname_lc = zend_str_tolower_dup(f->common.function_name, fname_len);
+		fname = f->common.function_name;
         
         /* only put the function that has the same name as the class as contructor if there isn't a __construct function */
-        if (fname_len == cname_len && !memcmp(fname_lc, cname_lc, fname_len) && f->common.scope != to->parent
-                && to->constructor == NULL) {
-            to->constructor = f;
-        } else if (fname_lc[0] == '_' && fname_lc[1] == '_' && f->common.scope != to->parent) {
+		if (f->common.fn_flags & ZEND_ACC_CTOR) {
+			to->constructor = f;
+		} else if (f->common.fn_flags & ZEND_ACC_DTOR) {
+			to->destructor = f;
+		} else if (f->common.fn_flags & ZEND_ACC_CLONE) {
+			to->clone = f;
+        } else if (fname_len > 2 && fname[0] == '_' && fname[1] == '_' && f->common.scope != to->parent) {
+			fname_lc = zend_str_tolower_dup(fname, fname_len);
             if (fname_len == sizeof(ZEND_CONSTRUCTOR_FUNC_NAME) - 1 && 
                     memcmp(fname_lc, ZEND_CONSTRUCTOR_FUNC_NAME, sizeof(ZEND_CONSTRUCTOR_FUNC_NAME)) == 0)
                 to->constructor = f;
@@ -652,10 +651,10 @@ static void restore_class_methods(zend_class_entry * to TSRMLS_DC)
                      memcmp(fname_lc, ZEND_SET_FUNC_NAME, sizeof(ZEND_SET_FUNC_NAME)) == 0)
                 to->__set = f;
             else if (fname_len == sizeof(ZEND_UNSET_FUNC_NAME) - 1 &&
-                    memcmp(fname_lc, ZEND_UNSET_FUNC_NAME, sizeof(ZEND_UNSET_FUNC_NAME)) == 0)
+                     memcmp(fname_lc, ZEND_UNSET_FUNC_NAME, sizeof(ZEND_UNSET_FUNC_NAME)) == 0)
                 to->__unset = f;
             else if (fname_len == sizeof(ZEND_ISSET_FUNC_NAME) - 1 &&
-                    memcmp(fname_lc, ZEND_ISSET_FUNC_NAME, sizeof(ZEND_ISSET_FUNC_NAME)) == 0)
+                     memcmp(fname_lc, ZEND_ISSET_FUNC_NAME, sizeof(ZEND_ISSET_FUNC_NAME)) == 0)
                 to->__isset = f;
             else if (fname_len == sizeof(ZEND_CALL_FUNC_NAME) - 1 &&
                      memcmp(fname_lc, ZEND_CALL_FUNC_NAME, sizeof(ZEND_CALL_FUNC_NAME)) == 0)
@@ -670,6 +669,7 @@ static void restore_class_methods(zend_class_entry * to TSRMLS_DC)
                      memcmp(fname_lc, ZEND_TOSTRING_FUNC_NAME, sizeof(ZEND_TOSTRING_FUNC_NAME)) == 0)
                 to->__tostring = f;
 #  endif
+			efree(fname_lc);
         }
         if (to->parent) {
             /* clear the child's prototype and IMPLEMENTED_ABSTRACT flag,
@@ -677,13 +677,11 @@ static void restore_class_methods(zend_class_entry * to TSRMLS_DC)
             f->common.prototype = NULL;
             f->common.fn_flags = f->common.fn_flags & (~ZEND_ACC_IMPLEMENTED_ABSTRACT);
         }
-        efree(fname_lc);
         p = p->pListNext;
     }
-    efree(cname_lc);
 }
 
-static zend_class_entry *restore_class_entry(zend_class_entry * to, ea_class_entry * from TSRMLS_DC)
+static inline zend_class_entry *restore_class_entry(zend_class_entry * to, ea_class_entry * from TSRMLS_DC)
 {
     zend_class_entry *old;
 

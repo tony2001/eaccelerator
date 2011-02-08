@@ -459,8 +459,7 @@ static inline zend_op_array *restore_op_array(zend_op_array * to, ea_op_array * 
         } scope;
         char *from_scope_lc = from->scope_name_lc;
         scope.v = to->scope;
-        if (zend_hash_find (CG(class_table), (void *) from_scope_lc, from->scope_name_len + 1, &scope.ptr) == SUCCESS &&
-                to->scope != NULL) {
+        if (to->scope != NULL && zend_hash_find (CG(class_table), (void *) from_scope_lc, from->scope_name_len + 1, &scope.ptr) == SUCCESS) {
             DBG(ea_debug_pad, (EA_DEBUG TSRMLS_CC));
             DBG(ea_debug_printf, (EA_DEBUG, "[%d]                   found '%s' in hash\n", getpid(), from->scope_name));
             DBG(ea_debug_printf, (EA_DEBUG, "name=%s :: to->scope is 0x%x", to->function_name, (unsigned int) to->scope));

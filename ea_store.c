@@ -175,14 +175,24 @@ static size_t calc_op_array(zend_op_array * from TSRMLS_DC)
         }
     }
     if (from->function_name != NULL) {
-        size += calc_string(from->function_name, strlen(from->function_name) + 1 TSRMLS_CC);
+		/* store both original name and name in the lower case */
+		int len = strlen(from->function_name);
+		char *function_name_lc = zend_str_tolower_dup(from->function_name, len);
+
+		size += calc_string(from->function_name, len + 1 TSRMLS_CC);
+		size += calc_string(function_name_lc, len + 1 TSRMLS_CC);
+		efree(function_name_lc);
     }
     if (from->scope != NULL) {
         // HOESH: the same problem?
         Bucket *q = CG(class_table)->pListHead;
         while (q != NULL) {
             if (*(zend_class_entry **) q->pData == from->scope) {
-                size += calc_string(q->arKey, q->nKeyLength TSRMLS_CC);
+				/* store both original name and name in the lower case */
+				char *scope_name_lc = zend_str_tolower_dup(q->arKey, q->nKeyLength - 1);
+				size += calc_string(q->arKey, q->nKeyLength TSRMLS_CC);
+				size += calc_string(scope_name_lc, q->nKeyLength TSRMLS_CC);
+				efree(scope_name_lc);
                 break;
             }
             q = q->pListNext;
@@ -512,8 +522,15 @@ static ea_op_array *store_op_array(char **at, zend_op_array * from TSRMLS_DC)
         }
     }
     to->pass_rest_by_reference = from->pass_rest_by_reference;
-    if (from->function_name != NULL)
-        to->function_name = store_string(at, from->function_name, strlen(from->function_name) + 1 TSRMLS_CC);
+    if (from->function_name != NULL) {
+		char *function_name_lc;
+
+		to->function_name_len = strlen(from->function_name);
+		function_name_lc = zend_str_tolower_dup(from->function_name, to->function_name_len);
+        to->function_name = store_string(at, from->function_name, to->function_name_len + 1 TSRMLS_CC);
+        to->function_name_lc = store_string(at, function_name_lc, to->function_name_len + 1 TSRMLS_CC);
+		efree(function_name_lc);
+	}
     to->fn_flags = from->fn_flags;
     to->scope_name = NULL;
     to->scope_name_len = 0;
@@ -521,8 +538,12 @@ static ea_op_array *store_op_array(char **at, zend_op_array * from TSRMLS_DC)
         Bucket *q = CG(class_table)->pListHead;
         while (q != NULL) {
             if (*(zend_class_entry **) q->pData == from->scope) {
-                to->scope_name = store_string(at, q->arKey, q->nKeyLength TSRMLS_CC);
+				char *scope_name_lc;
+
                 to->scope_name_len = q->nKeyLength - 1;
+				scope_name_lc = zend_str_tolower_dup(q->arKey, to->scope_name_len);
+                to->scope_name = store_string(at, q->arKey, q->nKeyLength TSRMLS_CC);
+                to->scope_name_lc = store_string(at, scope_name_lc, q->nKeyLength TSRMLS_CC);
 
                 DBG(ea_debug_pad, (EA_DEBUG TSRMLS_CC));
                 DBG(ea_debug_printf, (EA_DEBUG, 

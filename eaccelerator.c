@@ -620,16 +620,18 @@ static char *ea_resolve_path(const char *filename, int filename_length, const ch
 	}
 
 	/* Don't resolve paths which contain protocol (except of file://) */
-	for (p = filename; isalnum((int)*p) || *p == '+' || *p == '-' || *p == '.'; p++);
-	if ((*p == ':') && (p - filename > 1) && (p[1] == '/') && (p[2] == '/')) {
-		wrapper = php_stream_locate_url_wrapper(filename, &actual_path, STREAM_OPEN_FOR_INCLUDE TSRMLS_CC);
-		if (wrapper == &php_plain_files_wrapper) {
-			if (tsrm_realpath(actual_path, resolved_path TSRMLS_CC)) {
-				return estrdup(resolved_path);
-			}
-		}
-		return NULL;
-	}
+  if (memchr(filename, ':', filename_length)) {
+  	for (p = filename; isalnum((int)*p) || *p == '+' || *p == '-' || *p == '.'; p++);
+	  if ((*p == ':') && (p - filename > 1) && (p[1] == '/') && (p[2] == '/')) {
+  		wrapper = php_stream_locate_url_wrapper(filename, &actual_path, STREAM_OPEN_FOR_INCLUDE TSRMLS_CC);
+	  	if (wrapper == &php_plain_files_wrapper) {
+		  	if (tsrm_realpath(actual_path, resolved_path TSRMLS_CC)) {
+  				return estrdup(resolved_path);
+	  		}
+  		}
+	  	return NULL;
+  	}
+  }
 
 	if ((*filename == '.' && 
 	     (IS_SLASH(filename[1]) || 

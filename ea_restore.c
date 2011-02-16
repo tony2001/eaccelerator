@@ -273,9 +273,7 @@ typedef void *(*restore_bucket_t) (void *TSRMLS_DC);
 
 static inline zval *restore_zval_ptr(zval * from TSRMLS_DC);
 static inline HashTable *restore_hash(HashTable * target, HashTable * source, restore_bucket_t copy_bucket TSRMLS_DC);
-
-#define restore_zval_hash(target, source) \
-    restore_hash(target, source, (restore_bucket_t)restore_zval_ptr TSRMLS_CC)
+static inline HashTable *restore_hash_zval_ptr(HashTable * target, HashTable * source TSRMLS_DC);
 
 static inline void restore_zval(zval * zv TSRMLS_DC)
 {
@@ -297,7 +295,7 @@ static inline void restore_zval(zval * zv TSRMLS_DC)
     case IS_ARRAY:
     case IS_CONSTANT_ARRAY:
         if (Z_ARRVAL_P(zv) != NULL && Z_ARRVAL_P(zv) != &EG(symbol_table)) {
-            Z_ARRVAL_P(zv) = restore_zval_hash(NULL, Z_ARRVAL_P(zv));
+            Z_ARRVAL_P(zv) = restore_hash_zval_ptr(NULL, Z_ARRVAL_P(zv) TSRMLS_CC);
             Z_ARRVAL_P(zv)->pDestructor = ZVAL_PTR_DTOR;
         }
         return;
@@ -319,8 +317,15 @@ static inline zval *restore_zval_ptr(zval * from TSRMLS_DC)
     return p;
 }
 
-static inline HashTable *restore_hash(HashTable * target, HashTable * source,
-                               restore_bucket_t copy_bucket TSRMLS_DC)
+static void call_op_array_ctor_handler(zend_extension * extension, zend_op_array * op_array TSRMLS_DC) /* {{{ */
+{
+    if (extension->op_array_ctor) {
+        extension->op_array_ctor(op_array);
+    }
+}
+/* }}} */
+
+static inline HashTable *restore_hash(HashTable * target, HashTable * source, restore_bucket_t copy_bucket TSRMLS_DC) /* {{{ */
 {
     Bucket *p, *np, *prev_p;
     int nIndex;
@@ -383,15 +388,395 @@ static inline HashTable *restore_hash(HashTable * target, HashTable * source,
     target->pInternalPointer = target->pListHead;
     return target;
 }
+/* }}} */
 
-
-static void call_op_array_ctor_handler(zend_extension * extension,
-                                       zend_op_array * op_array TSRMLS_DC)
+static inline HashTable *restore_hash_op_array_ptr(HashTable * target, HashTable * source TSRMLS_DC) /* {{{ */
 {
-    if (extension->op_array_ctor) {
-        extension->op_array_ctor(op_array);
+    Bucket *p, *np, *prev_p;
+    int nIndex;
+
+    if (target == NULL) {
+        ALLOC_HASHTABLE(target);
     }
+    memcpy(target, source, sizeof(HashTable));
+    target->arBuckets =
+        (Bucket **) emalloc(target->nTableSize * sizeof(Bucket *));
+    memset(target->arBuckets, 0, target->nTableSize * sizeof(Bucket *));
+    target->pDestructor = NULL;
+    target->persistent = 0;
+    target->pListHead = NULL;
+    target->pListTail = NULL;
+#if HARDENING_PATCH_HASH_PROTECT
+    target->canary = zend_hash_canary;
+#endif
+
+    p = source->pListHead;
+    prev_p = NULL;
+    np = NULL;
+    while (p) {
+        np = (Bucket *) emalloc(offsetof(Bucket, arKey) + p->nKeyLength);
+        /*    np = (Bucket *) emalloc(sizeof(Bucket) + p->nKeyLength); */
+        nIndex = p->h % source->nTableSize;
+        if (target->arBuckets[nIndex]) {
+            np->pNext = target->arBuckets[nIndex];
+            np->pLast = NULL;
+            np->pNext->pLast = np;
+        } else {
+            np->pNext = NULL;
+            np->pLast = NULL;
+        }
+        target->arBuckets[nIndex] = np;
+        np->h = p->h;
+        np->nKeyLength = p->nKeyLength;
+
+        if (p->pDataPtr == NULL) {
+			union {
+				zend_function *v;
+				void *ptr;
+			} function;
+			int fname_len = 0;
+			char *fname_lc = NULL;
+			ea_op_array *from = (ea_op_array *)p->pData;
+			zend_op_array *to;
+
+			if (from->type == ZEND_INTERNAL_FUNCTION) {
+				to = emalloc(sizeof(zend_internal_function));
+				memset(to, 0, sizeof(zend_internal_function));
+			} else {
+				to = emalloc(sizeof(zend_op_array));
+				memset(to, 0, sizeof(zend_op_array));
+				if (ZendOptimizer) {
+					zend_llist_apply_with_argument(&zend_extensions, 
+							(llist_apply_with_arg_func_t) call_op_array_ctor_handler, to TSRMLS_CC);
+				}
+			}
+			to->type = from->type;
+			to->num_args = from->num_args;
+			to->required_num_args = from->required_num_args;
+			to->arg_info = from->arg_info;
+			to->pass_rest_by_reference = from->pass_rest_by_reference;
+			to->function_name = from->function_name;
+
+			fname_len = from->function_name_len;
+			fname_lc = from->function_name_lc;
+
+			to->fn_flags = from->fn_flags;
+
+			/* segv74:
+			 * to->scope = EAG(class_entry)
+			 *
+			 * if  from->scope_name == NULL,
+			 *     ; EAG(class) == NULL  : we are in function or outside function.
+			 *     ; EAG(class) != NULL  : inherited method not defined in current file, should have to find.
+			 *                              just LINK (zend_op_array *) to to original entry in parent,
+			 *                              but, with what? !!! I don't know PARENT CLASS NAME !!!!
+			 *
+			 *
+			 * if  from->scope_name != NULL,
+			 *     ; we are in class member function 
+			 *
+			 *     ; we have to find appropriate (zend_class_entry*) to->scope for name from->scope_name
+			 *     ; if we find in CG(class_table), link to it.
+			 *     ; if fail, it should be EAG(class_entry)
+			 *    
+			 * am I right here ? ;-(
+			 */
+			if (from->scope_name != NULL) {
+				union {
+					zend_class_entry *v;
+					void *ptr;
+				} scope;
+				char *from_scope_lc = from->scope_name_lc;
+				scope.v = to->scope;
+				if (to->scope != NULL && zend_hash_find (CG(class_table), (void *) from_scope_lc, from->scope_name_len + 1, &scope.ptr) == SUCCESS) {
+					to->scope = *(zend_class_entry **) to->scope;
+				} else {
+					to->scope = EAG(class_entry);
+				}
+			} else {
+				if (EAG(class_entry)) {
+					zend_class_entry *p;
+					for (p = EAG(class_entry)->parent; p; p = p->parent) {
+						if (zend_hash_find(&p->function_table, fname_lc, fname_len + 1, &function.ptr) == SUCCESS) {
+							to->scope = function.v->common.scope;
+							break;
+						}
+					}
+				} else {
+					to->scope = NULL;
+				}
+			}
+
+			if (from->type == ZEND_INTERNAL_FUNCTION) {
+				zend_class_entry *class_entry = EAG(class_entry);
+				if (class_entry != NULL && class_entry->parent != NULL && 
+						zend_hash_find(&class_entry->parent->function_table,
+							fname_lc, fname_len + 1,
+							&function.ptr) == SUCCESS && function.v->type == ZEND_INTERNAL_FUNCTION) {
+					((zend_internal_function *) (to))->handler = ((zend_internal_function *) function.v)->handler;
+				} else {
+					/* FIXME. I don't know how to fix handler.
+					 * TODO: must solve this somehow, to avoid returning damaged structure...
+					 */
+				}       
+				/* zend_internal_function also contains return_reference in ZE2 */
+				to->return_reference = from->return_reference;
+				/* this gets set by zend_do_inheritance */
+				to->prototype = NULL;
+			} else {
+				to->opcodes = from->opcodes;
+				to->last = to->size = from->last;
+				to->T = from->T;
+				to->brk_cont_array = from->brk_cont_array;
+				to->last_brk_cont = from->last_brk_cont;
+
+				to->current_brk_cont = -1;
+				to->static_variables = from->static_variables;
+				to->backpatch_count  = 0;
+
+				to->return_reference = from->return_reference;
+				to->done_pass_two = 1;
+				to->filename = from->filename;
+
+				to->try_catch_array = from->try_catch_array;
+				to->last_try_catch = from->last_try_catch;
+#ifdef ZEND_ENGINE_2_3
+				to->this_var = from->this_var;
+				to->early_binding = from->early_binding;
+#else
+				to->uses_this = from->uses_this;
+#endif
+
+				to->line_start = from->line_start;
+				to->line_end = from->line_end;
+#ifdef INCLUDE_DOC_COMMENTS
+				to->doc_comment_len = from->doc_comment_len;
+				to->doc_comment = from->doc_comment;
+#else
+				to->doc_comment_len = 0;
+				to->doc_comment = NULL;
+#endif
+				if (from->static_variables) {
+					to->static_variables = restore_hash_zval_ptr(NULL, from->static_variables TSRMLS_CC);
+					to->static_variables->pDestructor = ZVAL_PTR_DTOR;
+				}
+
+				to->vars             = from->vars;
+				to->last_var         = from->last_var;
+				to->size_var         = 0;
+
+				/* disable deletion in destroy_op_array */
+				++EAG(refcount_helper);
+				to->refcount = &EAG(refcount_helper);
+			}
+
+            np->pData = to;
+            np->pDataPtr = NULL;
+        } else {
+/*            np->pDataPtr = copy_bucket(p->pDataPtr TSRMLS_CC); */
+            np->pData = &np->pDataPtr;
+        }
+        np->pListLast = prev_p;
+        np->pListNext = NULL;
+
+        memcpy(np->arKey, p->arKey, p->nKeyLength);
+
+        if (prev_p) {
+            prev_p->pListNext = np;
+        } else {
+            target->pListHead = np;
+        }
+        prev_p = np;
+        p = p->pListNext;
+    }
+    target->pListTail = np;
+    target->pInternalPointer = target->pListHead;
+    return target;
 }
+/* }}} */
+
+static inline HashTable *restore_hash_zval_ptr(HashTable * target, HashTable * source TSRMLS_DC) /* {{{ */
+{
+    Bucket *p, *np, *prev_p;
+    int nIndex;
+
+    if (target == NULL) {
+        ALLOC_HASHTABLE(target);
+    }
+    memcpy(target, source, sizeof(HashTable));
+    target->arBuckets =
+        (Bucket **) emalloc(target->nTableSize * sizeof(Bucket *));
+    memset(target->arBuckets, 0, target->nTableSize * sizeof(Bucket *));
+    target->pDestructor = NULL;
+    target->persistent = 0;
+    target->pListHead = NULL;
+    target->pListTail = NULL;
+#if HARDENING_PATCH_HASH_PROTECT
+    target->canary = zend_hash_canary;
+#endif
+
+    p = source->pListHead;
+    prev_p = NULL;
+    np = NULL;
+    while (p) {
+        np = (Bucket *) emalloc(offsetof(Bucket, arKey) + p->nKeyLength);
+        /*    np = (Bucket *) emalloc(sizeof(Bucket) + p->nKeyLength); */
+        nIndex = p->h % source->nTableSize;
+        if (target->arBuckets[nIndex]) {
+            np->pNext = target->arBuckets[nIndex];
+            np->pLast = NULL;
+            np->pNext->pLast = np;
+        } else {
+            np->pNext = NULL;
+            np->pLast = NULL;
+        }
+        target->arBuckets[nIndex] = np;
+        np->h = p->h;
+        np->nKeyLength = p->nKeyLength;
+
+        if (p->pDataPtr == NULL) {
+			zval *d, *from;
+			
+			from = (zval *)p->pData;
+			ALLOC_ZVAL(d);
+			memcpy(d, from, sizeof(zval));
+			restore_zval(d TSRMLS_CC);
+			/* hrak: reset refcount to make sure there is one reference to this val, and prevent memleaks */
+#ifdef ZEND_ENGINE_2_3
+			Z_SET_REFCOUNT_P(d, 1);
+#else
+			d->refcount = 1;
+#endif
+            np->pData = d;
+            np->pDataPtr = NULL;
+        } else {
+			zval *d, *from;
+			
+			from = (zval *)p->pDataPtr;
+			ALLOC_ZVAL(d);
+			memcpy(d, from, sizeof(zval));
+			restore_zval(d TSRMLS_CC);
+			/* hrak: reset refcount to make sure there is one reference to this val, and prevent memleaks */
+#ifdef ZEND_ENGINE_2_3
+			Z_SET_REFCOUNT_P(d, 1);
+#else
+			d->refcount = 1;
+#endif
+            np->pDataPtr = d;
+            np->pData = &np->pDataPtr;
+        }
+        np->pListLast = prev_p;
+        np->pListNext = NULL;
+
+        memcpy(np->arKey, p->arKey, p->nKeyLength);
+
+        if (prev_p) {
+            prev_p->pListNext = np;
+        } else {
+            target->pListHead = np;
+        }
+        prev_p = np;
+        p = p->pListNext;
+    }
+    target->pListTail = np;
+    target->pInternalPointer = target->pListHead;
+    return target;
+}
+/* }}} */
+
+static inline HashTable *restore_hash_property_info(HashTable * target, HashTable * source TSRMLS_DC) /* {{{ */
+{
+    Bucket *p, *np, *prev_p;
+    int nIndex;
+
+    if (target == NULL) {
+        ALLOC_HASHTABLE(target);
+    }
+    memcpy(target, source, sizeof(HashTable));
+    target->arBuckets = (Bucket **) emalloc(target->nTableSize * sizeof(Bucket *));
+    memset(target->arBuckets, 0, target->nTableSize * sizeof(Bucket *));
+    target->pDestructor = NULL;
+    target->persistent = 0;
+    target->pListHead = NULL;
+    target->pListTail = NULL;
+#if HARDENING_PATCH_HASH_PROTECT
+    target->canary = zend_hash_canary;
+#endif
+
+    p = source->pListHead;
+    prev_p = NULL;
+    np = NULL;
+    while (p) {
+        np = (Bucket *) emalloc(offsetof(Bucket, arKey) + p->nKeyLength);
+        /*    np = (Bucket *) emalloc(sizeof(Bucket) + p->nKeyLength); */
+        nIndex = p->h % source->nTableSize;
+        if (target->arBuckets[nIndex]) {
+            np->pNext = target->arBuckets[nIndex];
+            np->pLast = NULL;
+            np->pNext->pLast = np;
+        } else {
+            np->pNext = NULL;
+            np->pLast = NULL;
+        }
+        target->arBuckets[nIndex] = np;
+        np->h = p->h;
+        np->nKeyLength = p->nKeyLength;
+
+        if (p->pDataPtr == NULL) {
+			zend_property_info *to = emalloc(sizeof(zend_property_info));
+			zend_property_info *from = (zend_property_info *)p->pData;
+
+			memcpy(to, from, sizeof(zend_property_info));
+			to->name = emalloc(from->name_length + 1);
+			memcpy(to->name, from->name, from->name_length + 1);
+#ifdef INCLUDE_DOC_COMMENTS
+			if (from->doc_comment != NULL) {
+				to->doc_comment = emalloc(from->doc_comment_len + 1);
+				memcpy(to->doc_comment, from->doc_comment, from->doc_comment_len + 1);
+			}
+#endif
+#ifdef ZEND_ENGINE_2_2
+			to->ce = EAG(class_entry);
+#endif
+            np->pData = to;
+            np->pDataPtr = NULL;
+        } else {
+			zend_property_info *to = emalloc(sizeof(zend_property_info));
+			zend_property_info *from = (zend_property_info *)p->pDataPtr;
+
+			memcpy(to, from, sizeof(zend_property_info));
+			to->name = emalloc(from->name_length + 1);
+			memcpy(to->name, from->name, from->name_length + 1);
+#ifdef INCLUDE_DOC_COMMENTS
+			if (from->doc_comment != NULL) {
+				to->doc_comment = emalloc(from->doc_comment_len + 1);
+				memcpy(to->doc_comment, from->doc_comment, from->doc_comment_len + 1);
+			}
+#endif
+#ifdef ZEND_ENGINE_2_2
+			to->ce = EAG(class_entry);
+#endif
+            np->pDataPtr = to;
+            np->pData = &np->pDataPtr;
+        }
+        np->pListLast = prev_p;
+        np->pListNext = NULL;
+
+        memcpy(np->arKey, p->arKey, p->nKeyLength);
+
+        if (prev_p) {
+            prev_p->pListNext = np;
+        } else {
+            target->pListHead = np;
+        }
+        prev_p = np;
+        p = p->pListNext;
+    }
+    target->pListTail = np;
+    target->pInternalPointer = target->pListHead;
+    return target;
+}
+/* }}} */
 
 static inline zend_op_array *restore_op_array(zend_op_array * to, ea_op_array * from TSRMLS_DC)
 {
@@ -556,7 +941,7 @@ static inline zend_op_array *restore_op_array(zend_op_array * to, ea_op_array * 
     to->doc_comment = NULL;
 #endif
     if (from->static_variables) {
-        to->static_variables = restore_zval_hash(NULL, from->static_variables);
+        to->static_variables = restore_hash_zval_ptr(NULL, from->static_variables TSRMLS_CC);
         to->static_variables->pDestructor = ZVAL_PTR_DTOR;
     }
 
@@ -730,24 +1115,24 @@ static inline zend_class_entry *restore_class_entry(zend_class_entry * to, ea_cl
     to->filename = from->filename;
 
     /* restore constants table */
-    restore_zval_hash(&to->constants_table, &from->constants_table);
+    restore_hash_zval_ptr(&to->constants_table, &from->constants_table TSRMLS_CC);
     to->constants_table.pDestructor = ZVAL_PTR_DTOR;
     
     /* restore properties */
-    restore_hash(&to->properties_info, &from->properties_info, (restore_bucket_t) restore_property_info TSRMLS_CC);
+	restore_hash_property_info(&to->properties_info, &from->properties_info TSRMLS_CC);
     to->properties_info.pDestructor = properties_info_dtor;
 
     /* restore default properties */
-    restore_zval_hash(&to->default_properties, &from->default_properties);
+    restore_hash_zval_ptr(&to->default_properties, &from->default_properties TSRMLS_CC);
     to->default_properties.pDestructor = ZVAL_PTR_DTOR;
 
     /* restore default_static_members */
-    restore_zval_hash(&to->default_static_members, &from->default_static_members);
+    restore_hash_zval_ptr(&to->default_static_members, &from->default_static_members TSRMLS_CC);
     to->default_static_members.pDestructor = ZVAL_PTR_DTOR;
     
     if (from->static_members != &(from->default_static_members)) {
         ALLOC_HASHTABLE(to->static_members);
-        restore_zval_hash(to->static_members, from->static_members);
+        restore_hash_zval_ptr(to->static_members, from->static_members TSRMLS_CC);
         to->static_members->pDestructor = ZVAL_PTR_DTOR;
     } else {
         to->static_members = &(to->default_static_members);
@@ -761,7 +1146,7 @@ static inline zend_class_entry *restore_class_entry(zend_class_entry * to, ea_cl
         to->parent = NULL;
     }
 
-    restore_hash(&to->function_table, &from->function_table, (restore_bucket_t)restore_op_array_ptr TSRMLS_CC);
+    restore_hash_op_array_ptr(&to->function_table, &from->function_table TSRMLS_CC);
     to->function_table.pDestructor = ZEND_FUNCTION_DTOR;
 
     restore_class_methods(to TSRMLS_CC);

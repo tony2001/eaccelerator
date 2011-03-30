@@ -1608,6 +1608,38 @@ PHP_RINIT_FUNCTION(eaccelerator)
 	return SUCCESS;
 }
 
+#if defined(PHP_VERSION_ID) && PHP_VERSION_ID < 50307
+static int clean_module_class(const zend_class_entry **ce, int *module_number TSRMLS_DC) /* {{{ */
+{
+  if ((*ce)->type == ZEND_INTERNAL_CLASS && (*ce)->module->module_number == *module_number) {
+    return ZEND_HASH_APPLY_REMOVE;
+  } else {
+    return ZEND_HASH_APPLY_KEEP;
+  }
+}
+/* }}} */
+
+static void clean_module_classes(int module_number TSRMLS_DC) /* {{{ */
+{
+  zend_hash_apply_with_argument(EG(class_table), (apply_func_arg_t) clean_module_class, (void *) &module_number TSRMLS_CC);
+}
+/* }}} */
+
+static void cleanup_temp_module(zend_module_entry *module TSRMLS_DC) /* {{{ */
+{
+  if (module->type == MODULE_TEMPORARY) {
+    clean_module_classes(module->module_number TSRMLS_CC);
+  }
+}
+/* }}} */
+
+static void cleanup_temp_modules(TSRMLS_D) /* {{{ */
+{
+  zend_hash_reverse_apply(&module_registry, (apply_func_t)cleanup_temp_module TSRMLS_CC);
+}
+/* }}} */
+#endif
+
 PHP_RSHUTDOWN_FUNCTION(eaccelerator)
 {
 	if (ea_mm_instance == NULL) {
@@ -1654,6 +1686,11 @@ PHP_RSHUTDOWN_FUNCTION(eaccelerator)
 	DBG(ea_debug_printf, (EA_DEBUG, "[%d] Enter RSHUTDOWN\n",getpid()));
 	eaccelerator_clean_request(TSRMLS_C);
 	DBG(ea_debug_printf, (EA_DEBUG, "[%d] Leave RSHUTDOWN\n",getpid()));
+
+#if defined(PHP_VERSION_ID) && PHP_VERSION_ID < 50307
+	cleanup_temp_modules(TSRMLS_C);
+#endif
+
 	return SUCCESS;
 }
 

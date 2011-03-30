@@ -1625,17 +1625,18 @@ static void clean_module_classes(int module_number TSRMLS_DC) /* {{{ */
 }
 /* }}} */
 
-static void cleanup_temp_module(zend_module_entry *module TSRMLS_DC) /* {{{ */
+static int cleanup_temp_module(zend_module_entry *module TSRMLS_DC) /* {{{ */
 {
   if (module->type == MODULE_TEMPORARY) {
     clean_module_classes(module->module_number TSRMLS_CC);
   }
+  return ZEND_HASH_APPLY_KEEP;
 }
 /* }}} */
 
 static void cleanup_temp_modules(TSRMLS_D) /* {{{ */
 {
-  zend_hash_reverse_apply(&module_registry, (apply_func_t)cleanup_temp_module TSRMLS_CC);
+  zend_hash_apply(&module_registry, (apply_func_t)cleanup_temp_module TSRMLS_CC);
 }
 /* }}} */
 #endif
@@ -1687,12 +1688,15 @@ PHP_RSHUTDOWN_FUNCTION(eaccelerator)
 	eaccelerator_clean_request(TSRMLS_C);
 	DBG(ea_debug_printf, (EA_DEBUG, "[%d] Leave RSHUTDOWN\n",getpid()));
 
-#if defined(PHP_VERSION_ID) && PHP_VERSION_ID < 50307
-	cleanup_temp_modules(TSRMLS_C);
-#endif
-
 	return SUCCESS;
 }
+
+#if defined(PHP_VERSION_ID) && PHP_VERSION_ID < 50307
+ZEND_MODULE_POST_ZEND_DEACTIVATE_D(eaccelerator)
+{
+	cleanup_temp_modules(TSRMLS_C);
+}
+#endif
 
 ZEND_BEGIN_ARG_INFO(eaccelerator_second_arg_force_ref, 0)
   ZEND_ARG_PASS_INFO(0)
@@ -1731,7 +1735,13 @@ zend_module_entry eaccelerator_module_entry = {
 #if ZEND_MODULE_API_NO >= 20010901
   EACCELERATOR_VERSION,          /* extension version number (string) */
 #endif
-  STANDARD_MODULE_PROPERTIES
+  NO_MODULE_GLOBALS,
+#if defined(PHP_VERSION_ID) && PHP_VERSION_ID < 50307
+  ZEND_MODULE_POST_ZEND_DEACTIVATE_N(eaccelerator),
+#else
+  NULL,
+#endif
+  STANDARD_MODULE_PROPERTIES_EX
 };
 
 #if defined(COMPILE_DL_EACCELERATOR)

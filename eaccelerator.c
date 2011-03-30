@@ -1020,7 +1020,7 @@ ZEND_DLEXPORT zend_op_array* eaccelerator_compile_file(zend_file_handle *file_ha
     zend_try {
 #ifdef ZEND_ENGINE_2_3
       orig_compiler_options = CG(compiler_options);
-      CG(compiler_options) |= ZEND_COMPILE_DELAYED_BINDING;  
+      CG(compiler_options) |= ZEND_COMPILE_IGNORE_INTERNAL_CLASSES | ZEND_COMPILE_DELAYED_BINDING;  
 #endif
       t = ea_saved_zend_compile_file(file_handle, type TSRMLS_CC);
 #ifdef ZEND_ENGINE_2_3

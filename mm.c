@@ -249,6 +249,7 @@ static void mm_destroy_lock(mm_mutex* lock) {
 
 typedef struct mm_mutex {
   pthread_rwlock_t lock;
+  int holding_type;
 } mm_mutex;
 
 static int mm_init_lock(const char* key, mm_mutex* lock) {
@@ -274,6 +275,7 @@ static int mm_init_lock(const char* key, mm_mutex* lock) {
   }
 
   pthread_rwlockattr_destroy(&attr);
+  lock->holding_type = -1;
   return 1;
 }
 
@@ -287,6 +289,7 @@ static int mm_do_lock(mm_mutex* lock, int kind) {
       return 0;
     }
   }
+  lock->holding_type = kind;
   return 1;
 }
 
@@ -294,7 +297,13 @@ static int mm_do_unlock(mm_mutex* lock) {
   if (pthread_rwlock_unlock(&lock->lock) != 0) {
     return 0;
   }
+  lock->holding_type = -1;
   return 1;
+}
+
+static int mm_holding_lock_type(mm_mutex *lock)
+{
+	return lock->holding_type;
 }
 
 static void mm_destroy_lock(mm_mutex* lock) {
@@ -1420,6 +1429,14 @@ int main() {
   }
   mm_destroy(mm);
   return 0;
+}
+#endif
+
+#ifndef MM_SEM_RWLOCK 
+/* XXX general handler stub */
+static int mm_holding_lock_type(mm_mutex *lock)
+{
+	return -1;
 }
 #endif
 

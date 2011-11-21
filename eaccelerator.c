@@ -109,6 +109,8 @@ static void (*ea_saved_zend_execute)(zend_op_array *op_array TSRMLS_DC);
 /* external declarations */
 PHPAPI void php_stripslashes(char *str, int *len TSRMLS_DC);
 
+static void (*ea_saved_on_timeout)(int seconds TSRMLS_DC);
+ZEND_DLEXPORT void eaccelerator_on_timeout(int seconds TSRMLS_DC);
 ZEND_DLEXPORT zend_op_array* eaccelerator_compile_file(zend_file_handle *file_handle, int type TSRMLS_DC);
 
 /******************************************************************************/
@@ -883,6 +885,24 @@ void ea_class_add_ref(zend_class_entry **ce)
 	(*ce)->refcount++;
 }
 
+ZEND_DLEXPORT void eaccelerator_on_timeout(int seconds TSRMLS_DC) /* {{{ */
+{
+#if defined(MM_SEM_RWLOCK)
+    if (ea_mm_instance && ea_mm_instance->mm) {
+      int type = mm_holding_lock_type(ea_mm_instance->mm);
+      switch (type) {
+        case MM_LOCK_RW:
+        case MM_LOCK_RD:
+          mm_do_unlock(ea_mm_instance, type);
+          break;
+      }
+    }
+#endif
+    ea_saved_on_timeout(seconds TSRMLS_CC);
+}
+/* }}} */
+
+
 /*
  * Intercept compilation of PHP file.  If we already have the file in
  * our cache, restore it.  Otherwise call the original Zend compilation
@@ -1525,6 +1545,9 @@ PHP_MINIT_FUNCTION(eaccelerator) {
       return FAILURE;
     }
     ea_saved_zend_compile_file = zend_compile_file;
+
+    ea_saved_on_timeout = zend_on_timeout;
+    zend_on_timeout = eaccelerator_on_timeout;
 
 #ifdef WITH_EACCELERATOR_DEBUG
     zend_compile_file = profile_compile_file;

@@ -726,6 +726,9 @@ static int mm_do_unlock(mm_mutex* lock) {
 #endif
 
 int mm_lock(MM* mm, int kind) {
+  if (!mm) {
+    return 0;
+  }
   if (mm_do_lock(mm->lock, kind)) {
     return 1;
   } else {
@@ -737,6 +740,9 @@ int mm_lock(MM* mm, int kind) {
 }
 
 int mm_unlock(MM* mm) {
+  if (!mm) {
+    return 0;
+  }
   if (mm_do_unlock(mm->lock)) {
     return 1;
   } else {
@@ -1200,7 +1206,7 @@ void* mm_malloc_nolock(MM* mm, size_t size) {
 }
 
 void mm_free_nolock(MM* mm, void* x) {
-  if (x != NULL) {
+  if (x != NULL && mm != NULL) {
     if (x >= mm->start && x < (void*)((char*)mm + mm->size)) {
       mm_mem_head *p = PTR_TO_HEAD(x);
       size_t size = p->size;

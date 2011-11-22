@@ -156,9 +156,38 @@
 #  define EACCELERATOR_UNPROTECT()
 #endif
 
-#define EACCELERATOR_LOCK_RW()    do {ZTS_LOCK(); mm_lock(ea_mm_instance->mm, MM_LOCK_RW);} while(0)
-#define EACCELERATOR_LOCK_RD()    do {ZTS_LOCK(); mm_lock(ea_mm_instance->mm, MM_LOCK_RD);} while(0)
-#define EACCELERATOR_UNLOCK()     do {mm_unlock(ea_mm_instance->mm); ZTS_UNLOCK();} while(0)
+#define EACCELERATOR_LOCK_RW()    do { \
+		ZTS_LOCK();\
+		if (EAG(holding_lock_type) != -1) {\
+			ea_debug_error("eAccelerator: trying to get recursive lock");\
+		} \
+		if (mm_lock(ea_mm_instance->mm, MM_LOCK_RW) > 0) { \
+			EAG(holding_lock_type) = MM_LOCK_RW; \
+		} \
+	} \
+	while(0)
+
+#define EACCELERATOR_LOCK_RD()    do { \
+		ZTS_LOCK();\
+		if (EAG(holding_lock_type) != -1) {\
+			ea_debug_error("eAccelerator: trying to get recursive lock");\
+		} \
+		if (mm_lock(ea_mm_instance->mm, MM_LOCK_RD) > 0) { \
+			EAG(holding_lock_type) = MM_LOCK_RD; \
+		} \
+	} \
+	while(0)
+
+#define EACCELERATOR_UNLOCK()     do { \
+		if (EAG(holding_lock_type) == -1) { \
+			ea_debug_error("eAccelerator: trying to unlock already unlocked rwlock"); \
+		} \
+		if (mm_unlock(ea_mm_instance->mm) > 0) { \
+			EAG(holding_lock_type) = -1; \
+		} \
+		ZTS_UNLOCK(); \
+	} while(0)
+
 #define EACCELERATOR_UNLOCK_RW()  EACCELERATOR_UNLOCK()
 #define EACCELERATOR_UNLOCK_RD()  EACCELERATOR_UNLOCK()
 
@@ -435,6 +464,7 @@ int xpad;
 int profile_level;
 long self_time[256];
 #endif
+int holding_lock_type;
 ZEND_END_MODULE_GLOBALS (eaccelerator)
 
 ZEND_EXTERN_MODULE_GLOBALS (eaccelerator)

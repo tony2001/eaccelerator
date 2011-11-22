@@ -887,17 +887,16 @@ void ea_class_add_ref(zend_class_entry **ce)
 
 ZEND_DLEXPORT void eaccelerator_on_timeout(int seconds TSRMLS_DC) /* {{{ */
 {
-#if defined(MM_SEM_RWLOCK)
     if (ea_mm_instance && ea_mm_instance->mm) {
-      int type = mm_holding_lock_type(ea_mm_instance->mm);
-      switch (type) {
+      switch (EAG(holding_lock_type)) {
         case MM_LOCK_RW:
+          EACCELERATOR_UNLOCK_RW();
+          break;
         case MM_LOCK_RD:
-          mm_do_unlock(ea_mm_instance, type);
+          EACCELERATOR_UNLOCK_RD();
           break;
       }
     }
-#endif
     ea_saved_on_timeout(seconds TSRMLS_CC);
 }
 /* }}} */
@@ -1627,6 +1626,7 @@ PHP_RINIT_FUNCTION(eaccelerator)
 	EAG(original_sigabrt_handler) = signal(SIGABRT, eaccelerator_crash_handler);
 #endif
 #endif
+  EAG(holding_lock_type) = -1;
 
 	DBG(ea_debug_printf, (EA_DEBUG, "[%d] Leave RINIT\n",getpid()));
 

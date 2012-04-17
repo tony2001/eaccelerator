@@ -106,6 +106,7 @@ dnl Test for union semun
   mm_shm_mmap_posix=no
 
 dnl sysvipc shared memory
+  AC_DEFINE_UNQUOTED(EA_USERID, $PHP_EACCELERATOR_USERID, [The userid eAccelerator will be running under.])
   AC_MSG_CHECKING(for sysvipc shared memory support)
   AC_TRY_RUN([#define MM_SEM_NONE
 #define MM_SHM_IPC
@@ -388,7 +389,6 @@ dnl Determine the best type
   esac
 
   AC_DEFINE_UNQUOTED(EAC_SEM_TYPE, "$sem_type", [eAccelerator semaphores type.]) 
-  AC_DEFINE_UNQUOTED(EA_USERID, $PHP_EACCELERATOR_USERID, [The userid eAccelerator will be running under.]) 
   PHP_SUBST(EACCELERATOR_SHARED_LIBADD)
 fi
 

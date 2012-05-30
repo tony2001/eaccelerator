@@ -16,9 +16,6 @@ PHP_ARG_ENABLE(eaccelerator, whether to enable eaccelerator support,
 PHP_ARG_ENABLE(eaccelerator-crash-detection, whether to enable eAccelerator crash detection,
 [  --disable-eaccelerator-crash-detection   Do not include eaccelerator crash detection], yes, no)
 
-PHP_ARG_ENABLE(eaccelerator-optimizer, whether to enable eAccelerator optimizer,
-[  --disable-eaccelerator-optimizer         Do not include eaccelerator optimizer], yes, no)
-
 PHP_ARG_ENABLE(eaccelerator-disassembler, whether to include eAccelerator disassembler,
 [  --enable-eaccelerator-disassembler       Include eaccelerator disassembler], no, no)
 
@@ -52,10 +49,6 @@ if test "$PHP_EACCELERATOR" != "no"; then
   fi
   if test "$PHP_EACCELERATOR_CRASH_DETECTION" = "yes"; then
     AC_DEFINE(WITH_EACCELERATOR_CRASH_DETECTION, 1, [Define if you like to release eAccelerator resources on PHP crash])
-  fi
-  if test "$PHP_EACCELERATOR_OPTIMIZER" = "yes"; then
-    eac_sources="$eac_sources optimize.c"
-    AC_DEFINE(WITH_EACCELERATOR_OPTIMIZER, 1, [Define if you like to use peephole opcode optimization])
   fi
   if test "$PHP_EACCELERATOR_DISASSEMBLER" = "yes"; then
     eac_sources="$eac_sources ea_dasm.c"

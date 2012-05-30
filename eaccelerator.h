@@ -360,7 +360,6 @@ typedef struct {
 	size_t total;
 	unsigned int hash_cnt;
 	zend_bool enabled;
-	zend_bool optimizer_enabled;
 	zend_bool check_mtime_enabled;
 	unsigned int rem_cnt;
 	time_t start_time;
@@ -407,10 +406,6 @@ void *eaccelerator_malloc2 (size_t size TSRMLS_DC);
 
 unsigned int eaccelerator_crc32 (const char *p, size_t n);
 
-#  ifdef WITH_EACCELERATOR_OPTIMIZER
-void eaccelerator_optimize (zend_op_array * op_array);
-#  endif
-
 #ifdef ZTS
 #  define EAG(v) TSRMG(eaccelerator_globals_id, zend_eaccelerator_globals*, v)
 #else
@@ -429,7 +424,6 @@ ZEND_BEGIN_MODULE_GLOBALS (eaccelerator)
 void *used_entries;			/* list of files which are used     */
 					/* by process/thread                */
 zend_bool enabled;
-zend_bool optimizer_enabled;
 zend_bool check_mtime_enabled;
 zend_bool compiler;
 zend_bool in_request;

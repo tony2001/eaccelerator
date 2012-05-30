@@ -271,7 +271,6 @@ static int init_mm(TSRMLS_D) {
   ea_mm_instance->hash_cnt = 0;
   ea_mm_instance->rem_cnt  = 0;
   ea_mm_instance->enabled = 1;
-  ea_mm_instance->optimizer_enabled = 1;
   ea_mm_instance->check_mtime_enabled = 1;
   ea_mm_instance->removed = NULL;
   ea_mm_instance->last_prune = time(NULL);	/* this time() call is harmless since this is init phase */
@@ -1030,10 +1029,6 @@ ZEND_DLEXPORT zend_op_array* eaccelerator_compile_file(zend_file_handle *file_ha
 
     DBG(ea_debug_printf, (EA_TEST_PERFORMANCE, "\t[%d] compile_file: compiling (%ld)\n", getpid(), ea_debug_elapsed_time(&tv_start)));
     
-		if (EAG(optimizer_enabled) && ea_mm_instance->optimizer_enabled) {
-			EAG(compiler) = 1;
-		}
-
 	/* try to compile the script */
     ea_bailout = 0;
     zend_try {
@@ -1213,8 +1208,6 @@ PHP_MINFO_FUNCTION(eaccelerator) {
   php_info_print_table_row(2, "Semaphores type", EAC_SEM_TYPE);
   php_info_print_table_row(2, "Caching Enabled", (EAG(enabled) && (ea_mm_instance != NULL) && 
               ea_mm_instance->enabled)?"true":"false");
-  php_info_print_table_row(2, "Optimizer Enabled", (EAG(optimizer_enabled) && 
-							(ea_mm_instance != NULL) && ea_mm_instance->optimizer_enabled)?"true":"false");
   php_info_print_table_row(2, "Check mtime Enabled", (EAG(check_mtime_enabled) && 
 							(ea_mm_instance != NULL) && ea_mm_instance->check_mtime_enabled)?"true":"false");
   if (ea_mm_instance != NULL) {
@@ -1292,7 +1285,6 @@ static PHP_INI_MH(eaccelerator_OnUpdateLong) {
 
 PHP_INI_BEGIN()
 STD_PHP_INI_ENTRY("eaccelerator.enable",         "1", PHP_INI_ALL, OnUpdateBool, enabled, zend_eaccelerator_globals, eaccelerator_globals)
-STD_PHP_INI_ENTRY("eaccelerator.optimizer",      "1", PHP_INI_ALL, OnUpdateBool, optimizer_enabled, zend_eaccelerator_globals, eaccelerator_globals)
 ZEND_INI_ENTRY1("eaccelerator.shm_size",        "0", PHP_INI_SYSTEM, eaccelerator_OnUpdateLong, &ea_shm_size)
 ZEND_INI_ENTRY1("eaccelerator.shm_ttl",         "0", PHP_INI_SYSTEM, eaccelerator_OnUpdateLong, &ea_shm_ttl)
 ZEND_INI_ENTRY1("eaccelerator.shm_prune_period", "0", PHP_INI_SYSTEM, eaccelerator_OnUpdateLong, &ea_shm_prune_period)
@@ -1459,7 +1451,6 @@ static void eaccelerator_init_globals(zend_eaccelerator_globals *eag)
 {
 	eag->used_entries = NULL;
 	eag->enabled = 1;
-	eag->optimizer_enabled = 1;
 	eag->check_mtime_enabled = 1;
 	eag->compiler = 0;
 	eag->ea_log_file = '\000';
@@ -1737,9 +1728,6 @@ function_entry eaccelerator_functions[] = {
   PHP_FE(eaccelerator_cached_scripts, NULL)
   PHP_FE(eaccelerator_removed_scripts, NULL)
   PHP_FE(eaccelerator_check_mtime, NULL)
-#ifdef WITH_EACCELERATOR_OPTIMIZER
-  PHP_FE(eaccelerator_optimizer, NULL)
-#endif
 #ifdef WITH_EACCELERATOR_DISASSEMBLER
   PHP_FE(eaccelerator_dasm_file, NULL)
 #endif
@@ -2023,11 +2011,7 @@ ZEND_DLEXPORT zend_extension zend_extension_entry = {
   NULL,   /* void (*activate)() */
   NULL,   /* void (*deactivate)() */
   NULL,   /* void (*message_handle)(int message, void *arg) */
-#ifdef WITH_EACCELERATOR_OPTIMIZER
-  eaccelerator_optimize,   /* void (*op_array_handler)(zend_op_array *o_a); */
-#else
   NULL,   /* void (*op_array_handler)(zend_op_array *o_a); */
-#endif
   NULL,   /* void (*statement_handler)(zend_op_array *o_a); */
   NULL,   /* void (*fcall_begin_handler)(zend_op_array *o_a); */
   NULL,   /* void (*fcall_end_handler)(zend_op_array *o_a); */
@@ -2052,11 +2036,7 @@ static zend_extension eaccelerator_extension_entry = {
   NULL,   /* void (*activate)() */
   NULL,   /* void (*deactivate)() */
   NULL,   /* void (*message_handle)(int message, void *arg) */
-#ifdef WITH_EACCELERATOR_OPTIMIZER
-  eaccelerator_optimize,   /* void (*op_array_handler)(zend_op_array *o_a); */
-#else
   NULL,   /* void (*op_array_handler)(zend_op_array *o_a); */
-#endif
   NULL,   /* void (*statement_handler)(zend_op_array *o_a); */
   NULL,   /* void (*fcall_begin_handler)(zend_op_array *o_a); */
   NULL,   /* void (*fcall_end_handler)(zend_op_array *o_a); */

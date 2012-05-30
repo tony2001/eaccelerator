@@ -157,10 +157,6 @@ SOURCE=..\mm.c
 
 SOURCE=..\opcodes.c
 # End Source File
-# Begin Source File
-
-SOURCE=..\optimize.c
-# End Source File
 # End Group
 # Begin Group "Header Files"
 

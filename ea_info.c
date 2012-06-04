@@ -335,6 +335,73 @@ PHP_FUNCTION(eaccelerator_removed_scripts)
 }
 /* }}} */
 
+PHP_FUNCTION(eaccelerator_put) /* {{{ */
+{
+	char *key;
+	int key_len;
+	zval *val;
+	time_t ttl = 0;
+
+	if (zend_parse_parameters (ZEND_NUM_ARGS() TSRMLS_CC, "sz|l", &key, &key_len, &val, &ttl) == FAILURE) {
+		return;
+	}
+
+	if (eaccelerator_put (key, key_len, val, ttl TSRMLS_CC)) {
+		RETURN_TRUE;
+	}
+	RETURN_FALSE;
+}
+/* }}} */
+
+PHP_FUNCTION(eaccelerator_get) /* {{{ */
+{
+	char *key;
+	int key_len;
+
+	if (zend_parse_parameters (ZEND_NUM_ARGS() TSRMLS_CC, "s", &key, &key_len) == FAILURE) {
+		return;
+	}
+
+	if (eaccelerator_get (key, key_len, return_value TSRMLS_CC)) {
+		return;
+	}
+	RETURN_NULL();
+}
+/* }}} */
+
+PHP_FUNCTION(eaccelerator_rm) /* {{{ */
+{
+	char *key;
+	int key_len;
+
+	if (zend_parse_parameters (ZEND_NUM_ARGS() TSRMLS_CC, "s", &key, &key_len) == FAILURE) {
+		return;
+	}
+
+	if (eaccelerator_rm (key, key_len TSRMLS_CC)) {
+		RETURN_TRUE;
+	}
+	RETURN_FALSE;
+}
+/* }}} */
+
+PHP_FUNCTION(eaccelerator_gc) /* {{{ */
+{
+	eaccelerator_gc(TSRMLS_C);
+	RETURN_TRUE;
+}
+/* }}} */
+
+/* {{{ PHP_FUNCTION(eaccelerator_list_keys): returns list of keys in shared memory that matches actual hostname or namespace */
+PHP_FUNCTION(eaccelerator_list_keys)
+{
+	if (ea_mm_instance != NULL && eaccelerator_list_keys(return_value TSRMLS_CC)) {
+		return;
+	}
+	RETURN_NULL ();
+}
+/* }}} */
+
 /*
  * Local variables:
  * tab-width: 4

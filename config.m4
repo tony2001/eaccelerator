@@ -42,7 +42,7 @@ if test "$PHP_EACCELERATOR" != "no"; then
       AC_DEFINE(HAVE_MPROTECT, 1, [Define if you have mprotect function])
   ])
 
-  eac_sources="eaccelerator.c ea_info.c ea_restore.c ea_store.c mm.c fnmatch.c opcodes.c debug.c"
+  eac_sources="eaccelerator.c ea_info.c ea_restore.c ea_store.c mm.c fnmatch.c opcodes.c debug.c ea_cache.c"
   
   if test "$PHP_EACCELERATOR_DOC_COMMENT_INCLUSION" = "yes"; then
     AC_DEFINE(INCLUDE_DOC_COMMENTS, 1, [If you want eAccelerator to retain doc-comments in internal php structures (meta-programming)])
@@ -370,6 +370,7 @@ dnl Determine the best type
     rwlock)
       AC_DEFINE(MM_SEM_RWLOCK, 1, [Define if you like to use pthread rwlock based semaphores])
       PHP_EVAL_LIBLINE([-pthread], EACCELERATOR_SHARED_LIBADD)
+      LIBS="-lpthread $LIBS"
       ;;
     spinlock)
       AC_DEFINE(MM_SEM_SPINLOCK, 1, [Define if you like to use spinlock based semaphores])

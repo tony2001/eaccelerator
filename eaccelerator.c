@@ -269,6 +269,7 @@ static int init_mm(TSRMLS_D) {
   ea_mm_instance->mm    = mm;
   ea_mm_instance->total = total;
   ea_mm_instance->hash_cnt = 0;
+  ea_mm_instance->user_hash_cnt = 0;
   ea_mm_instance->rem_cnt  = 0;
   ea_mm_instance->enabled = 1;
   ea_mm_instance->check_mtime_enabled = 1;
@@ -422,6 +423,13 @@ void eaccelerator_prune(time_t t) {
 /* Allocate a new cache chunk */
 void* eaccelerator_malloc2(size_t size TSRMLS_DC) {
   void *p = NULL;
+
+  if (eaccelerator_gc(TSRMLS_C) > 0) {
+    p = eaccelerator_malloc(size);
+    if (p != NULL) {
+      return p;
+    }
+  }
 
   if (ea_shm_prune_period > 0) {
     if (EAG(req_start) - ea_mm_instance->last_prune > ea_shm_prune_period) {
@@ -1226,6 +1234,8 @@ PHP_MINFO_FUNCTION(eaccelerator) {
     php_info_print_table_row(2, "Memory Allocated", s);
     snprintf(s, 32, "%u", ea_mm_instance->hash_cnt);
     php_info_print_table_row(2, "Cached Scripts", s);
+    snprintf(s, 32, "%u", ea_mm_instance->user_hash_cnt);
+    php_info_print_table_row(2, "Cached User Variables", s);
     snprintf(s, 32, "%u", ea_mm_instance->rem_cnt);
     php_info_print_table_row(2, "Removed Scripts", s);
 		start_time = php_format_date("d-M-Y H:i:s", 11, ea_mm_instance->start_time, 1 TSRMLS_CC);
@@ -1292,6 +1302,7 @@ ZEND_INI_ENTRY1("eaccelerator.debug",           "1", PHP_INI_SYSTEM, eaccelerato
 STD_PHP_INI_ENTRY("eaccelerator.log_file",      "", PHP_INI_SYSTEM, OnUpdateString, ea_log_file, zend_eaccelerator_globals, eaccelerator_globals)
 STD_PHP_INI_ENTRY("eaccelerator.check_mtime",     "1", PHP_INI_SYSTEM, OnUpdateBool, check_mtime_enabled, zend_eaccelerator_globals, eaccelerator_globals)
 STD_PHP_INI_ENTRY("eaccelerator.allowed_admin_path",       "", PHP_INI_SYSTEM, OnUpdateString, allowed_admin_path, zend_eaccelerator_globals, eaccelerator_globals)
+STD_PHP_INI_ENTRY("eaccelerator.name_space",       "", PHP_INI_ALL, OnUpdateString, name_space, zend_eaccelerator_globals, eaccelerator_globals)
 PHP_INI_ENTRY("eaccelerator.filter",             "",  PHP_INI_ALL, eaccelerator_filter)
 PHP_INI_END()
 
@@ -1728,6 +1739,11 @@ function_entry eaccelerator_functions[] = {
   PHP_FE(eaccelerator_cached_scripts, NULL)
   PHP_FE(eaccelerator_removed_scripts, NULL)
   PHP_FE(eaccelerator_check_mtime, NULL)
+  PHP_FE(eaccelerator_put, NULL)
+  PHP_FE(eaccelerator_get, NULL)
+  PHP_FE(eaccelerator_rm, NULL)
+  PHP_FE(eaccelerator_gc, NULL)
+  PHP_FE(eaccelerator_list_keys, NULL)
 #ifdef WITH_EACCELERATOR_DISASSEMBLER
   PHP_FE(eaccelerator_dasm_file, NULL)
 #endif

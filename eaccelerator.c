@@ -1633,7 +1633,7 @@ PHP_RINIT_FUNCTION(eaccelerator)
 	return SUCCESS;
 }
 
-#if defined(PHP_VERSION_ID) && PHP_VERSION_ID < 50307
+#if 0 && defined(PHP_VERSION_ID) && PHP_VERSION_ID < 50307
 static int clean_module_class(const zend_class_entry **ce, int *module_number TSRMLS_DC) /* {{{ */
 {
   if ((*ce)->type == ZEND_INTERNAL_CLASS && (*ce)->module->module_number == *module_number) {
@@ -1716,7 +1716,7 @@ PHP_RSHUTDOWN_FUNCTION(eaccelerator)
 	return SUCCESS;
 }
 
-#if defined(PHP_VERSION_ID) && PHP_VERSION_ID < 50307
+#if 0 && defined(PHP_VERSION_ID) && PHP_VERSION_ID < 50307
 ZEND_MODULE_POST_ZEND_DEACTIVATE_D(eaccelerator)
 {
 	cleanup_temp_modules(TSRMLS_C);
@@ -1761,7 +1761,7 @@ zend_module_entry eaccelerator_module_entry = {
   EACCELERATOR_VERSION,          /* extension version number (string) */
 #endif
   NO_MODULE_GLOBALS,
-#if defined(PHP_VERSION_ID) && PHP_VERSION_ID < 50307
+#if 0 && defined(PHP_VERSION_ID) && PHP_VERSION_ID < 50307
   ZEND_MODULE_POST_ZEND_DEACTIVATE_N(eaccelerator),
 #else
   NULL,

@@ -2,7 +2,7 @@
    +----------------------------------------------------------------------+
    | eAccelerator project                                                 |
    +----------------------------------------------------------------------+
-   | Copyright (c) 2004 - 2010 eAccelerator                               |
+   | Copyright (c) 2004 - 2006 eAccelerator                               |
    | http://eaccelerator.net                                  			  |
    +----------------------------------------------------------------------+
    | This program is free software; you can redistribute it and/or        |
@@ -20,36 +20,25 @@
    | Foundation, Inc., 59 Temple Place - Suite 330, Boston,               |
    | MA  02111-1307, USA.                                                 |
    |                                                                      |
-   | A copy is available at http://www.gnu.org/copyleft/gpl.txt           |
+   | A copy is availble at http://www.gnu.org/copyleft/gpl.txt            |
    +----------------------------------------------------------------------+
-   $Id$
+   $Id: cache.h 178 2006-03-06 09:08:40Z bart $
 */
 
-#ifndef INCLUDED_INFO_H
-#define INCLUDED_INFO_H
+#include "eaccelerator.h"
 
-PHP_FUNCTION(eaccelerator_caching);
-PHP_FUNCTION(eaccelerator_check_mtime);
-PHP_FUNCTION(eaccelerator_clear);
-PHP_FUNCTION(eaccelerator_clean);
-PHP_FUNCTION(eaccelerator_info);
-PHP_FUNCTION(eaccelerator_purge);
-PHP_FUNCTION(eaccelerator_cached_scripts);
-PHP_FUNCTION(eaccelerator_removed_scripts);
-PHP_FUNCTION(eaccelerator_put);
-PHP_FUNCTION(eaccelerator_get);
-PHP_FUNCTION(eaccelerator_rm);
-PHP_FUNCTION(eaccelerator_gc);
-PHP_FUNCTION(eaccelerator_list_keys);
+#ifndef EA_CACHE_H
+#define EA_CACHE_H
 
-#endif /* INCLUDED_INFO_H */
+#include "zend.h"
+#include "zend_API.h"
+#include "zend_extensions.h"
 
-/*
- * Local variables:
- * tab-width: 4
- * c-basic-offset: 4
- * End:
- * vim600: noet sw=4 ts=4 fdm=marker
- * vim<600: noet sw=4 ts=4
- */
+int eaccelerator_put (const char *key, int key_len, zval * val, time_t ttl TSRMLS_DC);
+int eaccelerator_get (const char *key, int key_len, zval * return_value TSRMLS_DC);
+int eaccelerator_rm (const char *key, int key_len TSRMLS_DC);
+size_t eaccelerator_gc (TSRMLS_D);
 
+int eaccelerator_list_keys(zval *return_value TSRMLS_DC);
+
+#endif /* EA_CACHE_H */

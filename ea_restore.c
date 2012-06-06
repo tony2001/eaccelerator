@@ -275,7 +275,7 @@ static inline zval *restore_zval_ptr(zval * from TSRMLS_DC);
 static inline HashTable *restore_hash(HashTable * target, HashTable * source, restore_bucket_t copy_bucket TSRMLS_DC);
 static inline HashTable *restore_hash_zval_ptr(HashTable * target, HashTable * source TSRMLS_DC);
 
-static inline void restore_zval(zval * zv TSRMLS_DC)
+void restore_zval(zval * zv TSRMLS_DC)
 {
     switch (EA_ZV_TYPE_P(zv)) {
     case IS_CONSTANT:

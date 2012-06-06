@@ -66,7 +66,7 @@
 #  endif
 #endif
 
-#undef MM_CHECK 
+#undef MM_CHECK
 #define MM_PATTERN  0xdeadbeef
 
 #if defined(MM_SHM_MMAP_FILE) || defined(MM_SHM_MMAP_ZERO) || defined(MM_SHM_MMAP_ANON) || defined(MM_SHM_MMAP_POSIX) || defined(HAVE_MPROTECT)
@@ -281,12 +281,16 @@ static int mm_do_lock(mm_mutex* lock, int kind) {
   int res;
   if (kind == MM_LOCK_RD) {
     if ((res = pthread_rwlock_rdlock(&lock->lock)) != 0) {
+#if !defined(MM_TEST_SEM) && !defined(MM_TEST_SHM)
 	  ea_debug_error("eAccelerator: pthread_rwlock_rdlock() error code: %d\n", res);
+#endif
       return 0;
     }
   } else {
     if ((res = pthread_rwlock_wrlock(&lock->lock)) != 0) {
+#if !defined(MM_TEST_SEM) && !defined(MM_TEST_SHM)
 	  ea_debug_error("eAccelerator: pthread_rwlock_wrlock() error code: %d\n", res);
+#endif
       return 0;
     }
   }
@@ -372,7 +376,7 @@ static int mm_init_lock(const char* key, mm_mutex* lock) {
   strncpy(s, key, MAXPATHLEN - 1);
   strxcat(s, ".sem.XXXXXX", MAXPATHLEN);
 #endif
-  if (mkstemp(s) == NULL) {
+  if (mkstemp(s) < 0) {
     perror(s);
     return 0;
   }
@@ -429,7 +433,11 @@ static int mm_init_lock(const char* key, mm_mutex* lock) {
     rc = semctl(lock->semid, 0, IPC_STAT, arg);
   } while (rc < 0 && errno == EINTR);
 
+#if !defined(MM_TEST_SEM) && !defined(MM_TEST_SHM)
+  buf.sem_perm.uid = 0;
+#else
   buf.sem_perm.uid = EA_USERID;
+#endif
 
   do {
     rc = semctl(lock->semid, 0, IPC_SET, arg);
@@ -1144,7 +1152,7 @@ void* mm_malloc_nolock(MM* mm, size_t size) {
   if (size > 0) {
     mm_mem_head* x = NULL;
     size_t realsize = (size_t)MM_ALIGN(MM_SIZE(size));
-#if MM_CHECK
+#ifdef MM_CHECK
     realsize += (size_t)MM_ALIGN(sizeof(int));
 #endif
     if (realsize <= mm->available) {

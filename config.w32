@@ -4,7 +4,6 @@
 ARG_ENABLE("eaccelerator", "Enable eaccelerator support", "no");
 
 ARG_WITH("eaccelerator-crash-detection", "Include eaccelerator crash detection", "yes");
-ARG_WITH("eaccelerator-optimizer", "Include eaccelerator optimizer", "yes");
 ARG_WITH("eaccelerator-shared-memory", "Include eaccelerator shared memory functions", "no");
 ARG_WITH("eaccelerator-sessions", "Include eaccelerator sessions", "no");
 ARG_WITH("eaccelerator-content-caching", "Include eaccelerator content caching", "no");
@@ -13,14 +12,11 @@ ARG_WITH("eaccelerator-disassembler", "Include disassembler", "no");
 ARG_WITH("eaccelerator-debug", "Enable the debug code so eaccelerator logs verbosely", "no");
 
 if (PHP_EACCELERATOR != "no") {
-	EXTENSION("eaccelerator", "eaccelerator.c optimize.c opcodes.c content.c mm.c session.c shm.c debug.c cache.c ea_restore.c ea_store.c ea_info.c ea_dasm.c", PHP_EACCELERATOR_SHARED);
+	EXTENSION("eaccelerator", "eaccelerator.c opcodes.c content.c mm.c session.c shm.c debug.c cache.c ea_restore.c ea_store.c ea_info.c ea_dasm.c", PHP_EACCELERATOR_SHARED);
 	AC_DEFINE("HAVE_EACCELERATOR", 1, "Define if you like to use eAccelerator");
 
 	if (PHP_EACCELERATOR_CRASH_DETECTION != "no") {
 		AC_DEFINE("WITH_EACCELERATOR_CRASH_DETECTION", 1, "Define if you like to release eAccelerator resources on PHP crash");
-	}
-	if (PHP_EACCELERATOR_OPTIMIZER != "no") {
-		AC_DEFINE("WITH_EACCELERATOR_OPTIMIZER", 1, "Define if you like to use peephole opcode optimization");
 	}
 	if (PHP_EACCELERATOR_SHARED_MEMORY != "no" || PHP_EACCELERATOR_CONTENT_CACHING != "no") {
 		AC_DEFINE("WITH_EACCELERATOR_SHM", 1, "Define if you like to use the eAccelerator functions to store keys in shared memory");

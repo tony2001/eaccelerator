@@ -196,8 +196,10 @@
 
 #define EACCELERATOR_HASH_LEVEL 2
 #define EA_HASH_SIZE      512
+#define EA_USER_HASH_SIZE      512
 
 #define EA_HASH_MAX       (EA_HASH_SIZE-1)
+#define EA_USER_HASH_MAX       (EA_USER_HASH_SIZE-1)
 
 #define eaccelerator_malloc(size)        mm_malloc_lock(ea_mm_instance->mm, size)
 #define eaccelerator_free(x)             mm_free_lock(ea_mm_instance->mm, x)
@@ -354,19 +356,33 @@ typedef struct _ea_file_header {
 int check_header(ea_file_header *hdr);
 void init_header(ea_file_header *hdr);
 
+/*
+ * bucket for user's cache
+ */
+typedef struct _ea_user_cache_entry {
+	struct _ea_user_cache_entry *next;
+	unsigned int hv;			/* hash value                  */
+	long ttl;					/* expiration time             */
+	long create;
+	int size;
+	zval value;					/* value                       */
+	char key[1];				/* key value (must be last el) */
+} ea_user_cache_entry;
+
 typedef struct {
 	MM *mm;
 	pid_t owner;
 	size_t total;
 	unsigned int hash_cnt;
+	unsigned int user_hash_cnt;
 	zend_bool enabled;
-	zend_bool optimizer_enabled;
 	zend_bool check_mtime_enabled;
 	unsigned int rem_cnt;
 	time_t start_time;
 	time_t last_prune;
 	ea_cache_entry *removed;
 	ea_cache_entry *hash[EA_HASH_SIZE];
+	ea_user_cache_entry *user_hash[EA_USER_HASH_SIZE];
 } eaccelerator_mm;
 
 typedef union align_union {
@@ -407,10 +423,6 @@ void *eaccelerator_malloc2 (size_t size TSRMLS_DC);
 
 unsigned int eaccelerator_crc32 (const char *p, size_t n);
 
-#  ifdef WITH_EACCELERATOR_OPTIMIZER
-void eaccelerator_optimize (zend_op_array * op_array);
-#  endif
-
 #ifdef ZTS
 #  define EAG(v) TSRMG(eaccelerator_globals_id, zend_eaccelerator_globals*, v)
 #else
@@ -429,13 +441,13 @@ ZEND_BEGIN_MODULE_GLOBALS (eaccelerator)
 void *used_entries;			/* list of files which are used     */
 					/* by process/thread                */
 zend_bool enabled;
-zend_bool optimizer_enabled;
 zend_bool check_mtime_enabled;
 zend_bool compiler;
 zend_bool in_request;
 char *ea_log_file;
 char *mem;
 char *allowed_admin_path;
+char *name_space;
 time_t req_start;			/* time of request start (set in RINIT) */
 HashTable strings;
 HashTable restored;

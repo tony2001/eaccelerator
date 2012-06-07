@@ -528,6 +528,7 @@ static ea_op_array *store_op_array(char **at, zend_op_array * from TSRMLS_DC)
                 DBG(ea_debug_printf, (EA_DEBUG, 
                         "[%d]                 find scope '%s' in CG(class_table) save hashkey '%s' [%08x] as to->scope_name\n",
                         getpid(), from->scope->name ? from->scope->name : "NULL", q->arKey, to->scope_name));
+                efree(scope_name_lc);
                 break;
             }
             q = q->pListNext;

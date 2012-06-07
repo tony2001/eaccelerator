@@ -792,21 +792,23 @@ static int ea_get_realname(zend_file_handle *file_handle, char* realname TSRMLS_
 }
 
 static int ea_get_phar_name(const char* filename, size_t filename_len, char* phar_name) {
-	size_t i = 0;
+    size_t i = 0;
 
-	for (i = sizeof("phar://"); i < filename_len - sizeof(".phar"); ++i) {
-		if (filename[i] == '.' && filename[i + 1] == 'p' && filename[i + 2] == 'h' &&
-				filename[i + 3] == 'a' && filename[i + 4] == 'r') {
-			int copy_len = (i - sizeof("phar://") + sizeof(".phar"));
-			if (copy_len >= MAXPATHLEN - 1) {
-				return 0;
-			}
-			memcpy(phar_name, &filename[sizeof("phar://") - 1], copy_len);
-			phar_name[copy_len] = '\0';
-			return 1;
-		}
-	}
-	return 0;
+    if (filename_len > (sizeof("phar://")-1 + sizeof(".phar")-1)) {
+        for (i = sizeof("phar://"); i < filename_len - sizeof(".phar"); ++i) {
+            if (filename[i] == '.' && filename[i + 1] == 'p' && filename[i + 2] == 'h' &&
+                filename[i + 3] == 'a' && filename[i + 4] == 'r') {
+                int copy_len = (i - sizeof("phar://") + sizeof(".phar"));
+                if (copy_len >= MAXPATHLEN - 1) {
+                    return 0;
+                }
+                memcpy(phar_name, &filename[sizeof("phar://") - 1], copy_len);
+                phar_name[copy_len] = '\0';
+                return 1;
+            }
+        }
+    }
+    return 0;
 }
 
 /* 

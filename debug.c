@@ -103,7 +103,7 @@ void ea_debug_error (char *format, ...)
     fflush (stderr);
 }
 
-/* 
+/*
  * All these functions aren't compiled when eA isn't compiled with DEBUG. They
  * are replaced with function with no body, so it's optimized away by the compiler.
  * Even if the debug level is ok.
@@ -121,7 +121,7 @@ void ea_debug_printf (long debug_level, char *format, ...)
         va_start (args, format);
         vsnprintf (output_buf, sizeof (output_buf), format, args);
         va_end (args);
-        
+
         if (F_fp != stderr) {
         	EACCELERATOR_FLOCK(file_no, LOCK_EX);
         }
@@ -289,6 +289,23 @@ void ea_debug_dump_ea_class_entry(ea_class_entry *ce)
  */
 void ea_debug_dump_zend_class_entry(zend_class_entry *ce)
 {
+#ifdef ZEND_ENGINE_2_4
+    fprintf(F_fp, "zend class entry: '%s' (len = %u)\n", ce->name, ce->name_length);
+    fprintf(F_fp, "\tparent: '%s'\n", (ce->parent == NULL) ? "none" : ce->parent->name);
+    fprintf(F_fp, "\ttype: %d\n", ce->type);
+
+    fprintf(F_fp, "\tfunction_table: %u entries\n", ce->function_table.nNumOfElements);
+    fprintf(F_fp, "\tdefault_properties: %u entries\n", ce->default_properties_count);
+    fprintf(F_fp, "\tproperties_info: %u entries\n", ce->properties_info.nNumOfElements);
+    fprintf(F_fp, "\tdefault_static_members: %u entries\n", ce->default_static_members_count);
+    fprintf(F_fp, "\tstatic_members: %u entries\n", Z_ARRVAL_PP(ce->static_members_table)->nNumOfElements);
+    fprintf(F_fp, "\tconstants_Table: %u entries\n", ce->constants_table.nNumOfElements);
+    fprintf(F_fp, "\tce_flags: %u\n", ce->ce_flags);
+    fprintf(F_fp, "\tnum_interfaces: %u\n", ce->num_interfaces);
+    fprintf(F_fp, "\tfilename: %s\n", (ce->type == ZEND_USER_CLASS?ce->info.user.filename:"internal"));
+    fprintf(F_fp, "\tline_start: %u\n", (ce->type == ZEND_USER_CLASS?ce->info.user.line_start:0));
+    fprintf(F_fp, "\tline_end: %u\n", (ce->type == ZEND_USER_CLASS?ce->info.user.line_end:0));
+#else
     fprintf(F_fp, "zend class entry: '%s' (len = %u)\n", ce->name, ce->name_length);
     fprintf(F_fp, "\tparent: '%s'\n", (ce->parent == NULL) ? "none" : ce->parent->name);
     fprintf(F_fp, "\ttype: %d\n", ce->type);
@@ -303,6 +320,8 @@ void ea_debug_dump_zend_class_entry(zend_class_entry *ce)
     fprintf(F_fp, "\tfilename: %s\n", ce->filename);
     fprintf(F_fp, "\tline_start: %u\n", ce->line_start);
     fprintf(F_fp, "\tline_end: %u\n", ce->line_end);
+#endif
+
 #  ifdef INCLUDE_DOC_COMMENTS
     fprintf(F_fp, "\tdoc_comment: %s\n", ce->doc_comment);
     fprintf(F_fp, "\tdoc_comment_len: %u\n", ce->doc_comment_len);

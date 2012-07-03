@@ -159,7 +159,7 @@ static char *get_zval(zval *v)
         case IS_STRING:
             size = Z_STRLEN_P(v) + 1 + sizeof("string('')");
             str = emalloc(size);
-            snprintf(str, size, "string('%s')", Z_STRVAL_P(v)); 
+            snprintf(str, size, "string('%s')", Z_STRVAL_P(v));
             break;
         case IS_BOOL:
             if (Z_LVAL_P(v)) {
@@ -185,7 +185,7 @@ static char *get_zval(zval *v)
         case IS_CONSTANT:
             size = Z_STRLEN_P(v) + 1 + sizeof("constant('')");
             str = emalloc(size);
-            snprintf(str, size, "constant('%s')", Z_STRVAL_P(v)); 
+            snprintf(str, size, "constant('%s')", Z_STRVAL_P(v));
             break;
         case IS_CONSTANT_ARRAY:
             str = emalloc(sizeof("constant_array(?)"));
@@ -200,7 +200,7 @@ static char *get_zval(zval *v)
 }
 /* }}} */
 
-/* {{{ get_op_array: return a php array with the given op_array structure 
+/* {{{ get_op_array: return a php array with the given op_array structure
  * array() { [0] .. [n] =>
  *      array () {
  *          [lineno]        => // the line number in the source code
@@ -208,11 +208,11 @@ static char *get_zval(zval *v)
  *          [extended_value]=> // the extended value field
  *          [op1]           => // the first opcode
  *          [op2]           => // the second opcode
- *          [result]        => // the result 
+ *          [result]        => // the result
  *      }
  * }
  */
-static zval *get_op_array(ea_op_array *op_array TSRMLS_DC) 
+static zval *get_op_array(ea_op_array *op_array TSRMLS_DC)
 {
     zval *return_value;
     MAKE_STD_ZVAL(return_value);
@@ -221,7 +221,7 @@ static zval *get_op_array(ea_op_array *op_array TSRMLS_DC)
     if (op_array->opcodes) {
         zend_op *opline;
         zend_op *end;
-        
+
         opline = op_array->opcodes;
         end = opline + op_array->last;
 
@@ -236,7 +236,7 @@ static zval *get_op_array(ea_op_array *op_array TSRMLS_DC)
 
             /* lineno */
             add_assoc_long(el, "lineno", opline->lineno);
-           
+
             /* opname */
             if (op != NULL) {
                 add_assoc_string(el, "opcode", (char *)op->opname, 1);
@@ -247,7 +247,7 @@ static zval *get_op_array(ea_op_array *op_array TSRMLS_DC)
 
             /* extended value */
             if ((op->ops & EXT_MASK) == EXT_OPLINE) {
-                snprintf(buf, sizeof(buf), "opline(%lu)", opline->extended_value); 
+                snprintf(buf, sizeof(buf), "opline(%lu)", opline->extended_value);
             } else if ((op->ops & EXT_MASK) == EXT_FCALL) {
                 snprintf(buf, sizeof(buf), "args(%lu)", opline->extended_value);
             } else if ((op->ops & EXT_MASK) == EXT_ARG) {
@@ -458,14 +458,14 @@ cont_failed:
             zval_used = 0;
             if (opline->result.op_type == IS_CV) {
                 snprintf(buf, sizeof(buf), "$cv%u(%s)", opline->result.u.var, op_array->vars[opline->result.u.var].name);
-            } else 
+            } else
             switch (op->ops & RES_MASK) {
                 case RES_STD:
                     if (opline->result.op_type == IS_CONST) {
                         zval_used = 1;
                         add_assoc_string(el, "result", get_zval(&opline->result.u.constant), 0);
                     } else if (opline->result.op_type == IS_TMP_VAR) {
-                        snprintf(buf, sizeof(buf), "$tmp%u", VAR_NUM(opline->result.u.var)); 
+                        snprintf(buf, sizeof(buf), "$tmp%u", VAR_NUM(opline->result.u.var));
                     } else if (opline->result.op_type == IS_VAR) {
                         if ((opline->result.u.EA.type & EXT_TYPE_UNUSED) != 0) {
                             snprintf(buf, sizeof(buf), "$var%u (unused)", VAR_NUM(opline->result.u.var));
@@ -517,7 +517,7 @@ static ea_cache_entry *get_cache_entry(const char *file) {
     unsigned int slot;
     ea_cache_entry *p;
     ea_cache_entry *result = NULL;
-    
+
     if (file != NULL) {
         EACCELERATOR_UNPROTECT();
         EACCELERATOR_LOCK_RD();
@@ -572,9 +572,9 @@ PHP_FUNCTION(eaccelerator_dasm_file)
     if (p == NULL) {
         RETURN_NULL();
     }
-  
+
     array_init(return_value);
-   
+
     /* file op_array */
     add_assoc_zval(return_value, "op_array", get_op_array(p->op_array TSRMLS_CC));
 
@@ -614,7 +614,7 @@ PHP_FUNCTION(eaccelerator_dasm_file)
             fc = fc->next;
         }
     }
-    add_assoc_zval(return_value, "classes", classes); 
+    add_assoc_zval(return_value, "classes", classes);
 }
 /* }}} */
 

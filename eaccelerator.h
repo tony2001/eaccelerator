@@ -53,6 +53,11 @@
 #   define ZEND_ENGINE_2_3
 #endif
 
+#if PHP_MAJOR_VERSION == 5 && PHP_MINOR_VERSION >= 4
+#   define ZEND_ENGINE_2_4
+#endif
+
+
 /* fixes compile errors on php5.1 */
 #ifdef STR_EMPTY_ALLOC
 #	define empty_string STR_EMPTY_ALLOC()
@@ -214,6 +219,16 @@ typedef struct _eaccelerator_op_array {
 #else
 	zend_bool uses_this;
 #endif
+#ifdef ZEND_ENGINE_2_4
+	union _zend_function *prototype;
+
+	zend_literal *literals;
+	int last_literal;
+
+	void **run_time_cache;
+	int  last_cache_slot;
+
+#endif
 	zend_bool return_reference;
 	zend_uint num_args;
 	zend_uint required_num_args;
@@ -258,6 +273,19 @@ typedef struct _eaccelerator_class_entry {
 	HashTable constants_table;
 	zend_uint ce_flags;
 	zend_uint num_interfaces;
+
+#ifdef ZEND_ENGINE_2_4	
+	zval **default_properties_table;
+	zval **default_static_members_table;
+	zval **static_members_table;
+	int default_properties_count;
+	int default_static_members_count;
+
+	zend_class_entry **traits;
+	zend_uint num_traits;
+	zend_trait_alias **trait_aliases;
+	zend_trait_precedence **trait_precedences;
+#endif
 
 	char *filename;
 	zend_uint line_start;

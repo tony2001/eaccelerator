@@ -52,11 +52,12 @@ static size_t calc_string(const char *str, int len TSRMLS_DC)
 static size_t calc_string(char *str, int len TSRMLS_DC)
 #endif
 {
-    if (len > MAX_DUP_STR_LEN || 
+    if (len > MAX_DUP_STR_LEN ||
             zend_hash_add(&EAG(strings), str, len, &str, sizeof(char *), NULL) == SUCCESS) {
         EA_SIZE_ALIGN(len);
         return len;
     }
+
     return 0;
 }
 
@@ -208,12 +209,21 @@ static size_t calc_op_array(zend_op_array * from TSRMLS_DC)
         opline = from->opcodes;
         end = opline + from->last;
         for (; opline < end; opline++) {
+#ifdef ZEND_ENGINE_2_4
+            if (opline->op1_type == IS_CONST) {
+//                size += calc_zval(opline->op1.zv TSRMLS_CC);
+            }
+            if (opline->op2_type == IS_CONST) {
+//                size += calc_zval(opline->op2.zv TSRMLS_CC);
+            }
+#else
             if (opline->op1.op_type == IS_CONST) {
                 size += calc_zval(&opline->op1.u.constant TSRMLS_CC);
             }
             if (opline->op2.op_type == IS_CONST) {
                 size += calc_zval(&opline->op2.u.constant TSRMLS_CC);
             }
+#endif
         }
     }
     if (from->brk_cont_array != NULL) {
@@ -242,6 +252,28 @@ static size_t calc_op_array(zend_op_array * from TSRMLS_DC)
     }
 #endif
 
+#ifdef ZEND_ENGINE_2_4
+    if (from->literals) {
+        zend_literal *q, *end;
+		int saved_size = size;
+
+		printf("BEFORE literals calc: %d\n", size);
+
+        ADDSIZE(size, (sizeof(zend_literal) * from->last_literal));
+
+        q = from->literals;
+        end = q + from->last_literal;
+        while (q < end) {
+			int size_s = size;
+            size += calc_zval(&q->constant TSRMLS_CC);
+			printf("calc_zval: %d\n", size - size_s);
+            q++;
+        }
+		printf("literals: %d\n", size - saved_size);
+    }
+#endif
+
+	printf("calc_op_array: %d\n", size);
     return size;
 }
 
@@ -261,7 +293,18 @@ static size_t calc_class_entry(zend_class_entry * from TSRMLS_DC)
     if (from->parent != NULL && from->parent->name) {
         size += calc_string(from->parent->name, from->parent->name_length + 1 TSRMLS_CC);
     }
-    if (from->filename != NULL) {
+
+#ifdef ZEND_ENGINE_2_4
+    if (from->info.user.filename != NULL) {
+        size += calc_string(from->info.user.filename, strlen(from->info.user.filename) + 1 TSRMLS_CC);
+    }
+#ifdef INCLUDE_DOC_COMMENTS
+     if (from->info.user.doc_comment != NULL) {
+        size += calc_string(from->info.user.doc_comment, from->info.user.doc_comment + 1 TSRMLS_CC);
+     }
+#endif
+#else
+	if (from->filename != NULL) {
         size += calc_string(from->filename, strlen(from->filename) + 1 TSRMLS_CC);
     }
 #ifdef INCLUDE_DOC_COMMENTS
@@ -269,18 +312,44 @@ static size_t calc_class_entry(zend_class_entry * from TSRMLS_DC)
         size += calc_string(from->doc_comment, from->doc_comment_len + 1 TSRMLS_CC);
      }
 #endif
-    
+#endif
+
     size += calc_zval_hash(&from->constants_table);
+#ifdef ZEND_ENGINE_2_4
+    if (from->default_properties_count) {
+        int i;
+        ADDSIZE(size, sizeof(zval *) * from->default_properties_count);
+        for (i = 0; i < from->default_properties_count; i++) {
+            if (from->default_properties_table[i]) {
+                size += calc_zval_ptr(&from->default_properties_table[i] TSRMLS_CC);
+            }
+        }
+    }
+#else
     size += calc_zval_hash(&from->default_properties);
+#endif
     size += calc_hash(&from->properties_info, (calc_bucket_t) calc_property_info);
 
+#ifdef ZEND_ENGINE_2_4
+    if (from->default_static_members_count) {
+        int i;
+        ADDSIZE(size, sizeof(zval *) * from->default_static_members_count);
+        for (i = 0; i < from->default_static_members_count; i++) {
+            if (from->default_static_members_table[i]) {
+                size += calc_zval_ptr(&from->default_static_members_table[i] TSRMLS_CC);
+            }
+        }
+    }
+#else
     size += calc_zval_hash(&from->default_static_members);
     if ((from->static_members != NULL) && (from->static_members != &from->default_static_members)) {
         ADDSIZE(size, sizeof(HashTable));
         size += calc_zval_hash(from->static_members);
     }
+#endif
     size += calc_hash(&from->function_table, (calc_bucket_t) calc_op_array);
 
+	printf("calc_class_entry: %d\n", size);
     return size;
 }
 
@@ -307,7 +376,7 @@ size_t calc_size(char *key, zend_op_array * op_array, Bucket * f, Bucket * c TSR
     b = f;
     while (b != NULL) {
         ADDSIZE(size, offsetof(ea_fc_entry, htabkey) + b->nKeyLength);
-    
+
         x = b->arKey;
         zend_hash_add(&EAG(strings), b->arKey, b->nKeyLength, &x, sizeof(char *), NULL);
         b = b->pListNext;
@@ -332,7 +401,7 @@ size_t calc_size(char *key, zend_op_array * op_array, Bucket * f, Bucket * c TSR
     (*at) += (len); \
     EACCELERATOR_ALIGN((*at));
 
-#ifdef ZEND_ENGINE_2_3
+#if defined (ZEND_ENGINE_2_3) || defined (ZEND_ENGINE_2_4)
 static inline char *store_string(char **at, const char *str, int len TSRMLS_DC)
 #else
 static inline char *store_string(char **at, char *str, int len TSRMLS_DC)
@@ -376,7 +445,7 @@ static zval *store_zval_ptr(char **at, zval *from TSRMLS_DC)
     return to;
 }
 
-static void store_hash_int(char **at, HashTable *target, HashTable *source, 
+static void store_hash_int(char **at, HashTable *target, HashTable *source,
                            Bucket *start, store_bucket_t copy_bucket,
                                    check_bucket_t check_bucket,
                                    zend_class_entry *from_ce)
@@ -437,7 +506,9 @@ static void store_hash_int(char **at, HashTable *target, HashTable *source,
 
             np->pListLast = prev_p;
             np->pListNext = NULL;
-
+#ifdef ZEND_ENGINE_2_4
+            np->arKey = (const char *)(np + 1);
+#endif
             memcpy(np->arKey, p->arKey, p->nKeyLength);
 
             if (prev_p) {
@@ -480,11 +551,12 @@ void store_zval(char **at, zval *zv TSRMLS_DC)
 static ea_op_array *store_op_array(char **at, zend_op_array * from TSRMLS_DC)
 {
     ea_op_array *to;
-    zend_op *opline;
+    zend_op *opline, *opline_from;
     zend_op *end;
+	char *at_saved = *at;
 
     DBG(ea_debug_pad, (EA_DEBUG TSRMLS_CC));
-    DBG(ea_debug_printf, (EA_DEBUG, "[%d] store_op_array: %s [scope=%s type=%x]\n", 
+    DBG(ea_debug_printf, (EA_DEBUG, "[%d] store_op_array: %s [scope=%s type=%x]\n",
             getpid(), from->function_name ? from->function_name : "(top)",
             from->scope ? from->scope->name : "NULL"
             , from->type
@@ -506,6 +578,9 @@ static ea_op_array *store_op_array(char **at, zend_op_array * from TSRMLS_DC)
         to->arg_info = (zend_arg_info *)ALLOCATE(at, from->num_args * sizeof(zend_arg_info));
 
         for (i = 0; i < from->num_args; i++) {
+            memcpy(to->arg_info + i, from->arg_info + i, sizeof(zend_arg_info));
+            to->arg_info[i].name = NULL;
+            to->arg_info[i].class_name = NULL;
             if (from->arg_info[i].name) {
                 to->arg_info[i].name = store_string(at, from->arg_info[i].name, from->arg_info[i].name_len + 1 TSRMLS_CC);
                 to->arg_info[i].name_len = from->arg_info[i].name_len;
@@ -515,13 +590,11 @@ static ea_op_array *store_op_array(char **at, zend_op_array * from TSRMLS_DC)
                 to->arg_info[i].class_name_len = from->arg_info[i].class_name_len;
             }
             /* php 5.1 introduces this in zend_arg_info for array type hinting */
-            to->arg_info[i].array_type_hint = from->arg_info[i].array_type_hint;
-            to->arg_info[i].allow_null = from->arg_info[i].allow_null;
-            to->arg_info[i].pass_by_reference = from->arg_info[i].pass_by_reference;
-            to->arg_info[i].return_reference = from->arg_info[i].return_reference;
         }
     }
+#ifndef ZEND_ENGINE_2_4
     to->pass_rest_by_reference = from->pass_rest_by_reference;
+#endif
     if (from->function_name != NULL) {
 		char *function_name_lc;
 
@@ -546,7 +619,7 @@ static ea_op_array *store_op_array(char **at, zend_op_array * from TSRMLS_DC)
                 to->scope_name_lc = store_string(at, scope_name_lc, q->nKeyLength TSRMLS_CC);
 
                 DBG(ea_debug_pad, (EA_DEBUG TSRMLS_CC));
-                DBG(ea_debug_printf, (EA_DEBUG, 
+                DBG(ea_debug_printf, (EA_DEBUG,
                         "[%d]                 find scope '%s' in CG(class_table) save hashkey '%s' [%08x] as to->scope_name\n",
                         getpid(), from->scope->name ? from->scope->name : "NULL", q->arKey, to->scope_name));
                 efree(scope_name_lc);
@@ -564,10 +637,12 @@ static ea_op_array *store_op_array(char **at, zend_op_array * from TSRMLS_DC)
 
     if (from->type == ZEND_INTERNAL_FUNCTION) {
         /* zend_internal_function also contains return_reference in ZE2 */
+#ifndef ZEND_ENGINE_2_4
         to->return_reference = from->return_reference;
+#endif
         return to;
     }
-    
+
     to->opcodes = from->opcodes;
     to->last = from->last;
     to->T = from->T;
@@ -575,7 +650,7 @@ static ea_op_array *store_op_array(char **at, zend_op_array * from TSRMLS_DC)
     to->last_brk_cont = from->last_brk_cont;
     to->try_catch_array = from->try_catch_array;
     to->last_try_catch = from->last_try_catch;
-#ifdef ZEND_ENGINE_2_3
+#if defined (ZEND_ENGINE_2_3) || defined (ZEND_ENGINE_2_4)
     to->this_var = from->this_var;
     to->early_binding = from->early_binding;
 #else
@@ -589,28 +664,48 @@ static ea_op_array *store_op_array(char **at, zend_op_array * from TSRMLS_DC)
     }
 
     to->static_variables = from->static_variables;
+#ifndef ZEND_ENGINE_2_4
     to->return_reference = from->return_reference;
-    to->filename = from->filename;
+#endif
+	to->filename = from->filename;
+
 
     if (from->opcodes != NULL) {
         to->opcodes = (zend_op *)ALLOCATE(at, from->last * sizeof(zend_op));
         memcpy(to->opcodes, from->opcodes, from->last * sizeof(zend_op));
 
         opline = to->opcodes;
+        opline_from = from->opcodes;
         end = opline + to->last;
-        for (; opline < end; opline++) {
+        for (; opline < end; opline++, opline_from++) {
+#ifdef ZEND_ENGINE_2_4
+            if (opline->op1_type == IS_CONST) {
+                opline->op1.literal = opline_from->op1.literal - from->literals + to->literals;
+            }
+            if (opline->op2_type == IS_CONST) {
+                opline->op2.literal = opline_from->op2.literal - from->literals + to->literals;
+            }
+            if (opline->result_type == IS_CONST) {
+                opline->result.literal = opline_from->result.literal - from->literals + to->literals;
+            }
+#else
             if (opline->op1.op_type == IS_CONST) {
                 store_zval(at, &opline->op1.u.constant TSRMLS_CC);
             }
             if (opline->op2.op_type == IS_CONST) {
                 store_zval(at, &opline->op2.u.constant TSRMLS_CC);
             }
+#endif
             switch (opline->opcode) {
 #ifdef ZEND_GOTO
             case ZEND_GOTO:
 #endif
             case ZEND_JMP:
-                opline->op1.u.jmp_addr = to->opcodes + (opline->op1.u.jmp_addr - from->opcodes);
+#ifdef ZEND_ENGINE_2_4
+			opline->op1.jmp_addr = to->opcodes + (opline->op1.jmp_addr - from->opcodes);
+#else
+			opline->op1.u.jmp_addr = to->opcodes + (opline->op1.u.jmp_addr - from->opcodes);
+#endif
                 break;
             case ZEND_JMPZ:
             case ZEND_JMPNZ:
@@ -619,7 +714,12 @@ static ea_op_array *store_op_array(char **at, zend_op_array * from TSRMLS_DC)
 #ifdef ZEND_JMP_SET
             case ZEND_JMP_SET:
 #endif
-                opline->op2.u.jmp_addr = to->opcodes + (opline->op2.u.jmp_addr - from->opcodes);
+#ifdef ZEND_ENGINE_2_4
+            case ZEND_JMP_SET_VAR:
+			opline->op2.jmp_addr = to->opcodes + (opline->op2.jmp_addr - from->opcodes);
+#else
+			opline->op2.u.jmp_addr = to->opcodes + (opline->op2.u.jmp_addr - from->opcodes);
+#endif
                 break;
             }
         }
@@ -642,10 +742,10 @@ static ea_op_array *store_op_array(char **at, zend_op_array * from TSRMLS_DC)
             memcpy(to->vars, from->vars, sizeof(zend_compiled_variable) * from->last_var);
             for (i = 0; i < from->last_var; i ++) {
                 to->vars[i].name = store_string(at, from->vars[i].name, from->vars[i].name_len+1 TSRMLS_CC);
-        }
+            }
     } else {
         to->last_var = 0;
-            to->vars = NULL;
+        to->vars = NULL;
     }
     to->line_start = from->line_start;
     to->line_end = from->line_end;
@@ -659,6 +759,30 @@ static ea_op_array *store_op_array(char **at, zend_op_array * from TSRMLS_DC)
     if (from->filename != NULL) {
         to->filename = store_string(at, from->filename, strlen(from->filename) + 1 TSRMLS_CC);
     }
+
+#ifdef ZEND_ENGINE_2_4
+    if (from->literals) {
+        zend_literal *q, *p, *end;
+		char *saved_at = *at;
+
+		printf("BEFORE literals store: %d\n", *at - at_saved);
+
+        q = from->literals;
+        p = to->literals = (zend_literal*) ALLOCATE(at, (sizeof(zend_literal) * from->last_literal));
+        end = p + from->last_literal;
+        while (p < end) {
+			char *aatt = *at;
+            *p = *q;
+            store_zval(at, &p->constant TSRMLS_CC);
+			printf("store_zval: %d\n", *at - aatt);
+            q++;
+            p++;
+        }
+		printf("literals stored: %d\n", *at - saved_at);
+    }
+#endif
+
+	printf("store_op_array: %d\n", *at - at_saved);
     return to;
 }
 
@@ -671,8 +795,8 @@ static zend_property_info *store_property_info(char **at, zend_property_info * f
     memcpy(to, from, sizeof(zend_property_info));
     to->name = store_string(at, from->name, from->name_length + 1 TSRMLS_CC);
 #ifdef INCLUDE_DOC_COMMENTS
-    to->doc_comment_len = from->doc_comment_len; 
-    if (from->doc_comment != NULL) { 
+    to->doc_comment_len = from->doc_comment_len;
+    if (from->doc_comment != NULL) {
        to->doc_comment = store_string(at, from->doc_comment, from->doc_comment_len + 1 TSRMLS_CC);
     }
 #else
@@ -682,13 +806,13 @@ static zend_property_info *store_property_info(char **at, zend_property_info * f
     return to;
 }
 
-/* 
- * The following two functions handle access checking of properties (public/private/protected) 
+/*
+ * The following two functions handle access checking of properties (public/private/protected)
  * and control proper inheritance during copying of the properties_info and (default_)static_members hashes
  *
  * Both functions return ZEND_HASH_APPLY_REMOVE if the property to be copied needs to be skipped, or
  * ZEND_HASH_APPLY_KEEP if the property needs to be copied over into the cache.
- *  
+ *
  * If the property is skipped due to access restrictions, or it needs inheritance of its value from the
  * parent, the restore phase will take care of that.
  *
@@ -700,7 +824,7 @@ static int store_property_access_check(Bucket * p, zend_class_entry * from_ce)
     zend_class_entry *from = from_ce;
     zend_class_entry *parent = from->parent;
     zend_property_info* child_info = (zend_property_info*)p->pData;
-    zend_property_info* parent_info = NULL; 
+    zend_property_info* parent_info = NULL;
 
 #ifdef ZEND_ENGINE_2_2
     return (child_info->ce != from);
@@ -719,6 +843,7 @@ static int store_property_access_check(Bucket * p, zend_class_entry * from_ce)
     return ZEND_HASH_APPLY_KEEP;
 }
 
+#ifndef ZEND_ENGINE_2_4
 static int store_static_member_access_check(Bucket * p, zend_class_entry * from_ce)
 {
     zend_class_entry *from = from_ce;
@@ -742,7 +867,7 @@ static int store_static_member_access_check(Bucket * p, zend_class_entry * from_
 #else
         zend_unmangle_property_name(p->arKey, &cname, &mname);
 #endif
-    
+
         /* lookup the member's info in parent and child */
         if((zend_hash_find(&parent->properties_info, mname, strlen(mname)+1, &pinfo.ptr) == SUCCESS) &&
             (zend_hash_find(&from->properties_info, mname, strlen(mname)+1, &cinfo.ptr) == SUCCESS)) {
@@ -756,6 +881,7 @@ static int store_static_member_access_check(Bucket * p, zend_class_entry * from_
     }
     return ZEND_HASH_APPLY_KEEP;
 }
+#endif
 
 /*
  * This function makes sure that functions/methods that are not in the scope of the current
@@ -769,7 +895,7 @@ static int store_function_inheritance_check(Bucket * p, zend_class_entry * from_
 {
     zend_class_entry *from = from_ce;
     zend_function *zf = p->pData;
-    
+
     if (zf->common.scope == from) {
         return ZEND_HASH_APPLY_KEEP;
     }
@@ -780,6 +906,7 @@ static ea_class_entry *store_class_entry(char **at, zend_class_entry * from TSRM
 {
     ea_class_entry *to;
     unsigned int i;
+	char *at_saved = *at;
 
     to = (ea_class_entry *)ALLOCATE(at, sizeof(ea_class_entry));
 
@@ -817,31 +944,95 @@ static ea_class_entry *store_class_entry(char **at, zend_class_entry * from TSRM
     }
     to->num_interfaces = i;
 
+#ifdef ZEND_ENGINE_2_4
+	//zval **default_properties_table;
+	//zval **default_static_members_table;
+	//zval **static_members_table;
+	to->default_properties_count = from->default_properties_count;
+	to->default_static_members_count = from->default_static_members_count;
+
+	//zend_class_entry **traits;
+	to->num_traits = from->num_traits;
+	//zend_trait_alias **trait_aliases;
+	//zend_trait_precedence **trait_precedences;
+#endif
+
+
+
     /*
      * hrak: no need to really store the interfaces since these get populated
      * at/after restore by zend_do_inheritance and ZEND_ADD_INTERFACE
      */
-     
+#ifdef ZEND_ENGINE_2_4
+    to->line_start = from->info.user.line_start;
+    to->line_end = from->info.user.line_end;
+# ifdef INCLUDE_DOC_COMMENTS
+    to->doc_comment_len = from->info.user.doc_comment_len;
+# endif
+
+    if (from->info.user.filename != NULL)
+        to->filename = store_string(at, from->info.user.filename, strlen(from->info.user.filename) + 1 TSRMLS_CC);
+# ifdef INCLUDE_DOC_COMMENTS
+    if (from->info.user.doc_comment != NULL)
+        to->doc_comment = store_string(at, from->info.user.doc_comment, from->info.user.doc_comment_len + 1 TSRMLS_CC);
+# endif
+#else
     to->line_start = from->line_start;
     to->line_end = from->line_end;
-#ifdef INCLUDE_DOC_COMMENTS
+# ifdef INCLUDE_DOC_COMMENTS
     to->doc_comment_len = from->doc_comment_len;
-#endif
+# endif
 
     if (from->filename != NULL)
         to->filename = store_string(at, from->filename, strlen(from->filename) + 1 TSRMLS_CC);
-#ifdef INCLUDE_DOC_COMMENTS
+# ifdef INCLUDE_DOC_COMMENTS
     if (from->doc_comment != NULL)
         to->doc_comment = store_string(at, from->doc_comment, from->doc_comment_len + 1 TSRMLS_CC);
+# endif
+#endif
+    store_zval_hash(at, &to->constants_table, &from->constants_table);
+
+#ifdef ZEND_ENGINE_2_4
+    to->default_properties_count = from->default_properties_count;
+    if (from->default_properties_count) {
+        int i;
+        to->default_properties_table = (zval**) ALLOCATE(at, (sizeof(zval*) * from->default_properties_count));
+        for (i = 0; i < from->default_properties_count; i++) {
+            if (from->default_properties_table[i]) {
+                to->default_properties_table[i] = store_zval_ptr(at, from->default_properties_table[i] TSRMLS_CC);
+            } else {
+                to->default_properties_table[i] = NULL;
+            }
+        }
+    } else {
+        to->default_properties_table = NULL;
+    }
+#else
+	store_zval_hash(at, &to->default_properties, &from->default_properties);
 #endif
 
-    store_zval_hash(at, &to->constants_table, &from->constants_table);
-    store_zval_hash(at, &to->default_properties, &from->default_properties);
     store_hash(at, &to->properties_info, &from->properties_info, (store_bucket_t) store_property_info, (check_bucket_t) store_property_access_check, from);
-    
+
+#ifdef ZEND_ENGINE_2_4
+	to->default_static_members_count = from->default_static_members_count;
+    if (from->default_static_members_count) {
+        int i;
+        to->default_static_members_table = (zval**) ALLOCATE(at, (sizeof(zval*) * from->default_static_members_count));
+        for (i = 0; i < from->default_static_members_count; i++) {
+            if (from->default_static_members_table[i]) {
+                to->default_static_members_table[i] = store_zval_ptr(at, from->default_static_members_table[i] TSRMLS_CC);
+            } else {
+                to->default_static_members_table[i] = NULL;
+            }
+        }
+    } else {
+        to->default_static_members_table = NULL;
+    }
+    to->static_members_table = to->default_static_members_table;
+#else
     if ((from->static_members != NULL) && (from->static_members != &from->default_static_members)) {
         store_zval_hash(at, &to->default_static_members, &from->default_static_members);
-        
+
         to->static_members = (HashTable *)ALLOCATE(at, sizeof(HashTable));
 
         store_hash(at, to->static_members, from->static_members, (store_bucket_t) store_zval_ptr, (check_bucket_t) store_static_member_access_check, from);
@@ -849,8 +1040,9 @@ static ea_class_entry *store_class_entry(char **at, zend_class_entry * from TSRM
         store_hash(at, &to->default_static_members, &from->default_static_members, (store_bucket_t) store_zval_ptr, (check_bucket_t) store_static_member_access_check, from);
         to->static_members = &to->default_static_members;
     }
+#endif
     store_hash(at, &to->function_table, &from->function_table, (store_bucket_t) store_op_array, (check_bucket_t) store_function_inheritance_check, from);
-    
+
 #ifdef WITH_EACCELERATOR_DEBUG
     EAG(xpad)--;
 #endif

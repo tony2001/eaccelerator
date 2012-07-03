@@ -129,8 +129,8 @@ static ea_cache_entry* hash_find_mm(const char *key, struct stat *buf, int *nrel
   q = NULL;
   p = ea_mm_instance->hash[slot];
   while (p != NULL) {
-    if (p->hv == hv && 
-        p->realfilename_len == key_len && 
+    if (p->hv == hv &&
+        p->realfilename_len == key_len &&
         memcmp(p->realfilename, key, key_len) == 0) {
       if (p->removed) {
         q = p;
@@ -138,7 +138,7 @@ static ea_cache_entry* hash_find_mm(const char *key, struct stat *buf, int *nrel
         continue;
       }
 
-      if (EAG(check_mtime_enabled) && 
+      if (EAG(check_mtime_enabled) &&
           ea_mm_instance->check_mtime_enabled &&
           (buf->st_mtime != p->mtime || buf->st_size != p->filesize)) {
 
@@ -153,8 +153,8 @@ static ea_cache_entry* hash_find_mm(const char *key, struct stat *buf, int *nrel
            } else {
              q->next = p->next;
            }
-           ea_mm_instance->hash_cnt--; 
-           p->next = ea_mm_instance->removed; 
+           ea_mm_instance->hash_cnt--;
+           p->next = ea_mm_instance->removed;
            ea_mm_instance->removed = p;
            ea_mm_instance->rem_cnt++; */
 
@@ -529,7 +529,7 @@ static int eaccelerator_store(char* key, struct stat *buf, int nreloads,
 
   DBG(ea_debug_pad, (EA_DEBUG TSRMLS_CC));
   DBG(ea_debug_printf, (EA_DEBUG, "[%d] eaccelerator_store:  returned %d, mm=%x\n", getpid(), size, ea_mm_instance->mm));
-  
+
   EACCELERATOR_UNPROTECT();
   EAG(mem) = eaccelerator_malloc(size);
   if (EAG(mem) == NULL) {
@@ -558,7 +558,7 @@ static int eaccelerator_store(char* key, struct stat *buf, int nreloads,
   return ret;
 }
 
-/* Try to restore a file from the cache. If the file isn't found in memory, the 
+/* Try to restore a file from the cache. If the file isn't found in memory, the
    the disk cache is checked */
 static zend_op_array* eaccelerator_restore(char *realname, struct stat *buf,
                                       int *nreloads, time_t compile_time TSRMLS_DC) {
@@ -583,8 +583,8 @@ static zend_op_array* eaccelerator_restore(char *realname, struct stat *buf,
       used->next   = (ea_used_entry*)EAG(used_entries);
       EAG(used_entries) = (void*)used;
       EAG(mem) = op_array->filename;
-			/* only restore the classes and functions when we restore this script 
-			 * for the first time. 
+			/* only restore the classes and functions when we restore this script
+			 * for the first time.
 			 */
       if (!zend_hash_exists(&EAG(restored), p->realfilename, p->realfilename_len + 1)) {
 				for (e = p->c_head; e!=NULL; e = e->next) {
@@ -593,7 +593,7 @@ static zend_op_array* eaccelerator_restore(char *realname, struct stat *buf,
         for (e = p->f_head; e!=NULL; e = e->next) {
           restore_function(e TSRMLS_CC);
         }
-				zend_hash_add(&EAG(restored), p->realfilename, p->realfilename_len + 1, NULL, 0, NULL);  
+				zend_hash_add(&EAG(restored), p->realfilename, p->realfilename_len + 1, NULL, 0, NULL);
 			}
 			EAG(mem) = p->realfilename;
     }
@@ -633,8 +633,8 @@ static char *ea_resolve_path(const char *filename, int filename_length, const ch
   	}
   }
 
-	if ((*filename == '.' && 
-	     (IS_SLASH(filename[1]) || 
+	if ((*filename == '.' &&
+	     (IS_SLASH(filename[1]) ||
 	      ((filename[1] == '.') && IS_SLASH(filename[2])))) ||
 	    IS_ABSOLUTE_PATH(filename, filename_length) ||
 	    !path ||
@@ -760,11 +760,11 @@ static int ea_get_realname(zend_file_handle *file_handle, char* realname TSRMLS_
 		return 1;
 	}
 
-	if (PG(include_path) == NULL || 
+	if (PG(include_path) == NULL ||
 			file_handle->filename[0] == '.' ||
       IS_SLASH(file_handle->filename[0]) ||
       IS_ABSOLUTE_PATH(file_handle->filename, strlen(file_handle->filename))) {
-    
+
 		return VCWD_REALPATH(file_handle->filename, realname) != NULL;
 	} else {
     int filename_len = strlen(file_handle->filename);
@@ -802,7 +802,7 @@ static int ea_get_phar_name(const char* filename, size_t filename_len, char* pha
     return 0;
 }
 
-/* 
+/*
  * Stat the file that belongs to file_handle. It puts result of the stat call
  * in buf and the real filename in realname.
  *
@@ -918,7 +918,7 @@ ZEND_DLEXPORT zend_op_array* eaccelerator_compile_file(zend_file_handle *file_ha
   ok_to_cache = ea_match(EAG(pattern_list), file_handle->filename);
 
   // eAccelerator isn't working, so just compile the file
-  if (!EAG(enabled) || (ea_mm_instance == NULL) || 
+  if (!EAG(enabled) || (ea_mm_instance == NULL) ||
       !ea_mm_instance->enabled || file_handle == NULL ||
       file_handle->filename == NULL || stat_result == 0 || !ok_to_cache) {
     DBG(ea_debug_printf, (EA_DEBUG, "\t[%d] compile_file: compiling\n", getpid()));
@@ -933,7 +933,7 @@ ZEND_DLEXPORT zend_op_array* eaccelerator_compile_file(zend_file_handle *file_ha
   }
 
   if (buf.st_mtime >= EAG(req_start) && ea_debug > 0) {
-		ea_debug_log("EACCELERATOR: Warning: \"%s\" is cached but it's mtime is in the future.\n", file_handle->filename);
+//		ea_debug_log("EACCELERATOR: Warning: \"%s\" is cached but it's mtime is in the future.\n", file_handle->filename);
   }
 
   t = eaccelerator_restore(realname, &buf, &nreloads, EAG(req_start) TSRMLS_CC);
@@ -1012,7 +1012,7 @@ ZEND_DLEXPORT zend_op_array* eaccelerator_compile_file(zend_file_handle *file_ha
     class_table_tail = CG(class_table)->pListTail;
 
     DBG(ea_debug_printf, (EA_TEST_PERFORMANCE, "\t[%d] compile_file: compiling (%ld)\n", getpid(), ea_debug_elapsed_time(&tv_start)));
-    
+
 		if (EAG(optimizer_enabled) && ea_mm_instance->optimizer_enabled) {
 			EAG(compiler) = 1;
 		}
@@ -1022,7 +1022,7 @@ ZEND_DLEXPORT zend_op_array* eaccelerator_compile_file(zend_file_handle *file_ha
     zend_try {
 #ifdef ZEND_ENGINE_2_3
       orig_compiler_options = CG(compiler_options);
-      CG(compiler_options) |= ZEND_COMPILE_IGNORE_INTERNAL_CLASSES | ZEND_COMPILE_DELAYED_BINDING;  
+      CG(compiler_options) |= ZEND_COMPILE_IGNORE_INTERNAL_CLASSES | ZEND_COMPILE_DELAYED_BINDING;
 #endif
       t = ea_saved_zend_compile_file(file_handle, type TSRMLS_CC);
 #ifdef ZEND_ENGINE_2_3
@@ -1068,12 +1068,12 @@ ZEND_DLEXPORT zend_op_array* eaccelerator_compile_file(zend_file_handle *file_ha
     CG(function_table) = orig_function_table;
     CG(class_table) = orig_class_table;
     EG(class_table) = orig_eg_class_table;
-    DBG(ea_debug_printf, (EA_DEBUG, "\t[%d] restoring CG(class_table)[%08x] != EG(class_table)[%08x]\n", 
+    DBG(ea_debug_printf, (EA_DEBUG, "\t[%d] restoring CG(class_table)[%08x] != EG(class_table)[%08x]\n",
                 getpid(), CG(class_table), EG(class_table)));
     while (function_table_tail != NULL) {
       zend_op_array *op_array = (zend_op_array*)function_table_tail->pData;
       if (op_array->type == ZEND_USER_FUNCTION) {
-        if (zend_hash_add(CG(function_table), function_table_tail->arKey, function_table_tail->nKeyLength, op_array, 
+        if (zend_hash_add(CG(function_table), function_table_tail->arKey, function_table_tail->nKeyLength, op_array,
                     sizeof(zend_op_array), NULL) == FAILURE && function_table_tail->arKey[0] != '\000') {
           CG(in_compilation) = 1;
           CG(compiled_filename) = file_handle->opened_path;
@@ -1086,11 +1086,17 @@ ZEND_DLEXPORT zend_op_array* eaccelerator_compile_file(zend_file_handle *file_ha
     while (class_table_tail != NULL) {
       zend_class_entry **ce = (zend_class_entry**)class_table_tail->pData;
       if ((*ce)->type == ZEND_USER_CLASS) {
-        if (zend_hash_add(CG(class_table), class_table_tail->arKey, class_table_tail->nKeyLength, 
+        if (zend_hash_add(CG(class_table), class_table_tail->arKey, class_table_tail->nKeyLength,
                     ce, sizeof(zend_class_entry*), NULL) == FAILURE && class_table_tail->arKey[0] != '\000') {
           CG(in_compilation) = 1;
           CG(compiled_filename) = file_handle->opened_path;
-          CG(zend_lineno) = (*ce)->line_start;
+#ifdef ZEND_ENGINE_2_4
+            CG(zend_lineno) = (*ce)->info.user.line_start;
+#else
+			CG(zend_lineno) = (*ce)->line_start;
+#endif
+
+
           zend_error(E_ERROR, "Cannot redeclare class %s", class_table_tail->arKey);
         }
       }
@@ -1192,13 +1198,20 @@ PHP_MINFO_FUNCTION(eaccelerator) {
   php_info_print_table_start();
   php_info_print_table_header(2, "eAccelerator support", "enabled");
   php_info_print_table_row(2, "Version", EACCELERATOR_VERSION);
+#ifndef TODO
+  //TODO:
+  php_info_print_table_row(2, "Shared memory type", "unknow");
+  php_info_print_table_row(2, "Semaphores type", "sem");
+#else
   php_info_print_table_row(2, "Shared memory type", EAC_SHM_TYPE);
   php_info_print_table_row(2, "Semaphores type", EAC_SEM_TYPE);
-  php_info_print_table_row(2, "Caching Enabled", (EAG(enabled) && (ea_mm_instance != NULL) && 
+#endif
+
+  php_info_print_table_row(2, "Caching Enabled", (EAG(enabled) && (ea_mm_instance != NULL) &&
               ea_mm_instance->enabled)?"true":"false");
-  php_info_print_table_row(2, "Optimizer Enabled", (EAG(optimizer_enabled) && 
+  php_info_print_table_row(2, "Optimizer Enabled", (EAG(optimizer_enabled) &&
 							(ea_mm_instance != NULL) && ea_mm_instance->optimizer_enabled)?"true":"false");
-  php_info_print_table_row(2, "Check mtime Enabled", (EAG(check_mtime_enabled) && 
+  php_info_print_table_row(2, "Check mtime Enabled", (EAG(check_mtime_enabled) &&
 							(ea_mm_instance != NULL) && ea_mm_instance->check_mtime_enabled)?"true":"false");
   if (ea_mm_instance != NULL) {
     size_t available;
@@ -1230,7 +1243,7 @@ PHP_MINFO_FUNCTION(eaccelerator) {
   DISPLAY_INI_ENTRIES();
 }
 
-/* 
+/*
  * Parse a list of filters which is seperated by a " "
  */
 static struct ea_pattern_t *ea_parse_filter(char *filter)
@@ -1247,7 +1260,7 @@ static struct ea_pattern_t *ea_parse_filter(char *filter)
 
 		len = strlen(token);
 		list_head->pattern = malloc(len + 1);
-		strncpy(list_head->pattern, token, len + 1); 
+		strncpy(list_head->pattern, token, len + 1);
 		list_head->next = p;
 		p = list_head;
 	}
@@ -1279,7 +1292,7 @@ STD_PHP_INI_ENTRY("eaccelerator.optimizer",      "1", PHP_INI_ALL, OnUpdateBool,
 ZEND_INI_ENTRY1("eaccelerator.shm_size",        "0", PHP_INI_SYSTEM, eaccelerator_OnUpdateLong, &ea_shm_size)
 ZEND_INI_ENTRY1("eaccelerator.shm_ttl",         "0", PHP_INI_SYSTEM, eaccelerator_OnUpdateLong, &ea_shm_ttl)
 ZEND_INI_ENTRY1("eaccelerator.shm_prune_period", "0", PHP_INI_SYSTEM, eaccelerator_OnUpdateLong, &ea_shm_prune_period)
-ZEND_INI_ENTRY1("eaccelerator.debug",           "1", PHP_INI_SYSTEM, eaccelerator_OnUpdateLong, &ea_debug)
+ZEND_INI_ENTRY1("eaccelerator.debug",           "0", PHP_INI_SYSTEM, eaccelerator_OnUpdateLong, &ea_debug)
 STD_PHP_INI_ENTRY("eaccelerator.log_file",      "", PHP_INI_SYSTEM, OnUpdateString, ea_log_file, zend_eaccelerator_globals, eaccelerator_globals)
 STD_PHP_INI_ENTRY("eaccelerator.check_mtime",     "1", PHP_INI_SYSTEM, OnUpdateBool, check_mtime_enabled, zend_eaccelerator_globals, eaccelerator_globals)
 STD_PHP_INI_ENTRY("eaccelerator.allowed_admin_path",       "", PHP_INI_SYSTEM, OnUpdateString, allowed_admin_path, zend_eaccelerator_globals, eaccelerator_globals)
@@ -1477,7 +1490,7 @@ static int eaccelerator_check_php_version(TSRMLS_D) {
         strcmp(Z_STRVAL(v),PHP_VERSION) == 0) {
       ret = 1;
     } else {
-      ea_debug_error("[%s] This build of \"%s\" was compiled for PHP version %s. Rebuild it for your PHP version (%s) or download precompiled binaries.\n", 
+      ea_debug_error("[%s] This build of \"%s\" was compiled for PHP version %s. Rebuild it for your PHP version (%s) or download precompiled binaries.\n",
 					EACCELERATOR_EXTENSION_NAME, EACCELERATOR_EXTENSION_NAME,PHP_VERSION,Z_STRVAL(v));
     }
     zval_dtor(&v);
@@ -1499,7 +1512,7 @@ PHP_MINIT_FUNCTION(eaccelerator) {
 #endif
   }
   if (!eaccelerator_check_php_version(TSRMLS_C)) {
-    /* 
+    /*
 		 * do not return FAILURE, because it causes PHP to completely fail.
 		 * Just disable eAccelerator instead of making eA fail starting php
 		 */
@@ -1516,8 +1529,8 @@ PHP_MINIT_FUNCTION(eaccelerator) {
   ea_debug_init(TSRMLS_C);
 
   if (type == MODULE_PERSISTENT &&
-      strcmp(sapi_module.name, "cgi") != 0 &&
-      strcmp(sapi_module.name, "cli") != 0) {
+      strcmp(sapi_module.name, "cgi") != 0 /*&&
+      strcmp(sapi_module.name, "cli") != 0*/) {
     DBG(ea_debug_put, (EA_DEBUG, "\n=======================================\n"));
     DBG(ea_debug_printf, (EA_DEBUG, "[%d] EACCELERATOR STARTED\n", getpid()));
     DBG(ea_debug_put, (EA_DEBUG, "=======================================\n"));
@@ -1536,11 +1549,11 @@ PHP_MINIT_FUNCTION(eaccelerator) {
     zend_compile_file = eaccelerator_compile_file;
 #endif
   }
-  
+
   if (!ea_is_zend_extension) {
     register_eaccelerator_as_zend_extension();
   }
-  
+
   /* cache the properties_info destructor */
   properties_info_dtor = get_zend_destroy_property_info(TSRMLS_C);
   return SUCCESS;
@@ -1707,7 +1720,12 @@ ZEND_BEGIN_ARG_INFO(eaccelerator_second_arg_force_ref, 0)
   ZEND_ARG_PASS_INFO(1)
 ZEND_END_ARG_INFO();
 
-function_entry eaccelerator_functions[] = {
+#ifdef ZEND_ENGINE_2_4
+	const zend_function_entry
+#else
+	function_entry
+#endif
+eaccelerator_functions[] = {
   PHP_FE(eaccelerator_caching, NULL)
   PHP_FE(eaccelerator_clear, NULL)
   PHP_FE(eaccelerator_clean, NULL)
@@ -1756,148 +1774,148 @@ static startup_func_t last_startup;
 static zend_llist_element *eaccelerator_el;
 
 static const unsigned char eaccelerator_logo[] = {
-      71,  73,  70,  56,  57,  97,  88,   0,  31,   0, 
-     213,   0,   0, 150, 153, 196, 237, 168,  86, 187, 
-     206, 230,   4,   4,   4, 108, 110, 144,  99, 144, 
-     199, 136, 138, 184,  87,  88, 109, 165, 165, 167, 
-     163, 166, 202, 240, 151,  44, 149,  91,  21, 225, 
-     225, 229,   4,  76, 164, 252, 215, 171, 255, 255, 
-     255, 212, 212, 224, 241, 200, 149, 141, 144, 192, 
-     216, 216, 226, 251, 230, 205, 192, 193, 218, 207, 
-     221, 238, 181, 188, 216, 130, 132, 168, 150, 152, 
-     185, 152, 152, 154, 180, 181, 198, 215, 184, 147, 
-      40, 102, 177, 224, 232, 242, 244, 244, 244, 235, 
-     236, 239, 118, 121, 157, 193, 193, 194, 146, 148, 
-     174, 181, 143,  96, 154, 183, 219, 156, 159, 200, 
-     126, 128, 170, 174, 175, 193,  65,  39,   7, 232, 
-     214, 192, 254, 241, 226, 246, 246, 248, 108,  65, 
-      13, 142, 144, 185, 252, 224, 189, 138, 171, 213, 
-      69, 122, 188, 239, 244, 249,  48,  49,  60, 176, 
-     178, 209, 200, 201, 222, 252, 252, 253, 251, 251, 
-     251, 162, 163, 187, 208, 208, 213, 169, 171, 205, 
-     241, 234, 225, 255, 252, 249, 254, 248, 241, 140, 
-     142, 169, 249, 186, 111,  33, 249,   4,   0,   0, 
-       0,   0,   0,  44,   0,   0,   0,   0,  88,   0, 
-      31,   0,   0,   6, 255,  64, 137, 112,  72,  44, 
-      26, 143, 200, 164, 114, 201,  92,  62, 158, 208, 
-     168, 116,  74, 173,  90, 175, 216, 108,  85, 168, 
-     237, 122, 191,  15,  25, 163, 118, 209, 153,   0, 
-      68, 128,  73, 119, 169,  49, 100,  86,  46, 120, 
-      78, 127, 216,  60,  21,  93,  83,   8, 208,  85, 
-      60,  54,  83, 114, 117, 132,  89,  32,  23,  38, 
-      73,  38, 103,  72,  38,  23,  32,  82, 123, 146, 
-     147,  69, 106,   9,  52,  21,  19,  53, 137, 138, 
-      51,  51, 156, 141,  21, 100,  52,   9, 148, 166, 
-     123,   0, 106, 126,  16,  21, 104,  67, 169, 106, 
-     140,   9,   3, 159, 140,  18, 176, 182,   0,  23, 
-      21, 101,  67,  21,  80,  32,  52, 192,  52,  44, 
-       6,  16,  15,   6,  23,  44,  81,  24,  81,  25, 
-      81, 194,  80,  25,   6,  18,  12,  80,  23,  15, 
-     169,  15, 172, 155, 105,  33,   7,   4, 158,  46, 
-       0,  33,   3,   7,   7,  51,   7, 139, 231, 225, 
-       7,  25, 124,  23,  23,  52, 190,  19,   4, 205, 
-      44,  27,   4,   4,  19,  57,  15,  33,  15,  32, 
-      54,  64, 168, 241,   0,   5,  10,  28, 255,  54, 
-     160, 120, 128, 163, 160,  65,   2,  15, 244, 229, 
-     200, 113, 162,  26,   4,  20, 252,  22, 130, 128, 
-      48,  98, 131,  30,  34,  38, 102, 208,  58,  64, 
-     203,   4,  73, 115,   3,   6, 184, 152,  69,  75, 
-     228,   1,  87,  38,  80, 204,  19, 242, 235,   9, 
-      54,  31,   4,  78, 212, 152, 192, 128,   1,   8, 
-     255,  31,  79,  78, 108,  99, 245, 239,  24,   3, 
-     136,  16,  32, 212, 139,  24,  34,  83,   8,   3, 
-      62,  33, 128,  56,  90,   3,  68, 136,  17, 173, 
-     138, 176,  76,  16, 114,  64,   2, 145,   4,   0, 
-     136, 196, 128, 129,  22, 215, 146,  66,  50, 224, 
-     248,  40,  33, 147,  62,   2,  11,  39, 120, 120, 
-      48, 162,  33,  10,   2,  44,  62,  64, 156, 144, 
-     244,  31, 129,  17,  12,  31, 240, 157, 240,  76, 
-     238, 131,  12,   4, 160, 110,   4,   1, 130, 192, 
-       6,   6,  33, 112, 212,  48, 226, 195, 220,  25, 
-     145,  95, 189, 118,  77,  64,  50, 236, 172,  79, 
-      66,  92, 140,  96,  11,   0,  71,  78,  12,  39, 
-      12, 108, 200,  71,  32,  68, 190,  16,  38,  70, 
-      56,  54, 120,  87,  71, 136,  16,  25,  70,  36, 
-     160, 141,  65,  33,  10,  12,  57,  13,  36, 240, 
-     173,  15,  64,   2,  31,  58, 186, 189,  34,  96, 
-     238,  86,  73,  90, 198,  75, 146,  12,   1, 128, 
-     249, 203, 208,  62,  74,   9,  49,  96,   0,   3, 
-      53,   9,   6,  78, 220,  78, 141, 218, 251, 137, 
-      19, 168, 199, 163, 230,  46, 254, 246, 120, 247, 
-     169, 193, 183, 127, 234,  34,  67,   6,  63,  51, 
-     249, 156,  12,  55, 160, 181,  57, 114, 255, 137, 
-      52,   3, 127,  62,  12, 129,  65, 118,  74, 112, 
-     247,  29, 120, 219,  81, 163, 224, 130, 224,  61, 
-      40, 225, 130,  15, 222, 162,  74,  60, 160, 116, 
-     181,  95,   6,  36, 189, 212, 255, 225, 103,  39, 
-      97, 224,  74, 119, 186, 157,  98, 162,  18, 169, 
-     172,  65,   3,  13,  40, 184, 178, 149,  14,   9, 
-     160,  97,   2,  87,  18, 204, 104,  66,  89,  51, 
-      24,  23, 163,  16,  62, 132, 224, 195,  90,  39, 
-       6, 121, 132,  37,  58, 176, 136, 195,  59,  46, 
-     152, 133,  98, 135, 174,   8, 129, 129, 143,  56, 
-      36, 160,  93,  33,  84,  82,  97,   3,  11,  12, 
-     136, 128,   3,  66, 227,  44,  49,   2, 110,  67, 
-     248, 224, 131,   6,  34,  48, 176, 204,   3, 131, 
-      84, 169, 230,  19,  44, 128, 144, 195,   6,  71, 
-     190, 179,   4,  26,  46, 136, 169,   1,  10,  57, 
-     236, 192,   2,  15,  79, 164, 185, 166, 154,  55, 
-     124, 192, 192, 155,   8, 228,  54, 130,  11, 136, 
-     134,  86, 167, 152,  99,  34, 176,  65,  14,  12, 
-     124,  16,   8,  20, 126,  62, 176,   2,   5,  20, 
-     188, 160, 233, 166, 155,  58, 224, 105,   4,  61, 
-     252,  73,  69, 160,  59,  12,  42,   2,  10,   8, 
-      32, 160, 193, 170, 171, 166, 138, 130,   8, 144, 
-     238, 240,   1, 159, 145,  72,   0,   5,  15,  20, 
-      56,  16,  65,   4,  63,   4, 224, 171,   2,   1, 
-       0, 171, 192, 176, 195,   6,  32, 234,  21, 129, 
-     126,  48,  85,  79, 204,  50,  43, 235,   7,  55, 
-     196,  97, 171, 165, 159, 254, 240, 195, 176,  63, 
-     188, 240,   0, 173,  80, 244, 192, 194, 153,   2, 
-     192, 113, 236, 184, 114, 172,  96, 174, 185, 152, 
-      82, 160, 255, 133,   7,  13,  20, 240, 132,  12, 
-       5, 196,  80, 192,  92,  15, 192,  32, 175,   0, 
-      15,  88,  16, 195, 190,  22, 148, 224, 238,  19, 
-     250, 242,  27, 176, 188, 226, 198, 128, 205, 190, 
-     252, 202,  96, 111,   1, 248,  62, 128, 112,   1, 
-      22,  80, 106, 235,  11,  14,  80, 188, 107, 175, 
-     190, 250, 106,  45, 198,   1, 144, 192, 193,  19, 
-       5,  52, 208,  64,  24,  29, 116,  96, 111,   3, 
-     240,  54,   0,  67, 200,   2,   8, 160,  50,  12, 
-      30, 216,  11, 133, 203,  48, 192,  76,  51,  12, 
-     237,  62, 112,  65, 187,  54, 216, 107, 178,   7, 
-      49, 168,  28,  52, 190, 237, 194,  80, 178, 196, 
-      43, 108,  28, 172,   2,  11, 120, 204, 193, 211, 
-      17, 112, 176, 235, 211,  28, 236, 240,  68,   7, 
-      33, 151, 128, 179, 184,  45,  55,  32,  64, 180, 
-      22, 120, 224, 114, 203,  10, 199,  48, 179, 215, 
-     225, 186,  12, 178, 217,  33, 163,  92, 175, 217, 
-      22, 120, 125, 131,  13, 242,  62, 224, 117, 189, 
-      35, 247,  41, 129,   3, 196,  50, 189,  64,  11, 
-      36, 216,  48, 183,  29,  79,   4,  98, 195, 164, 
-      46, 119,  80, 180, 217, 103,  75, 225, 178, 200, 
-       2, 200, 252, 196, 227, 104, 139,  44, 242,   5, 
-      50,  52, 160,  56,  12, 111,  63, 160, 246,  19, 
-     246, 218,  96, 121, 206, 122, 191, 224, 247, 223, 
-      45, 164, 238, 244, 174, 172,  63, 173, 238,   3, 
-       5, 152,  28,  50, 206,  17,  43,  76, 154,  51, 
-     232,  93,  67,  33, 185, 231, 121, 243,  46,  64, 
-      12,  29,  60,  80, 130, 208, 193, 203, 204,  46, 
-     231,  50,  96, 109, 119, 205,  13, 208, 139, 166, 
-     173,  42, 144, 176,  64,  10, 212,  87, 159, 250, 
-       2, 216, 103, 191, 192,  14, 129, 168, 252, 132, 
-     202,  33,   7,  93, 188, 230, 138, 139, 221,   0, 
-     191,  56, 239, 203, 240, 249,  49,  88, 160, 118, 
-     220,  43, 155, 189, 115, 204, 140, 227, 172, 120, 
-     243, 118, 135, 139, 245, 164, 149,  78,  74, 248, 
-     220, 130, 187, 193, 224,  30,  16,  51, 113, 149, 
-     160,   4,  54, 208,  90,   9, 102,  86,  51,  56, 
-     196, 172, 102,  98, 171,  25,  12,  74, 240,  64, 
-     152, 197, 204,  38,  53, 139,  88, 189,  90, 182, 
-     192, 201, 213, 236,  76,  48, 179, 129,   5,  96, 
-     166, 183, 113, 153,  80,  77,  66,  74, 161,  10, 
+      71,  73,  70,  56,  57,  97,  88,   0,  31,   0,
+     213,   0,   0, 150, 153, 196, 237, 168,  86, 187,
+     206, 230,   4,   4,   4, 108, 110, 144,  99, 144,
+     199, 136, 138, 184,  87,  88, 109, 165, 165, 167,
+     163, 166, 202, 240, 151,  44, 149,  91,  21, 225,
+     225, 229,   4,  76, 164, 252, 215, 171, 255, 255,
+     255, 212, 212, 224, 241, 200, 149, 141, 144, 192,
+     216, 216, 226, 251, 230, 205, 192, 193, 218, 207,
+     221, 238, 181, 188, 216, 130, 132, 168, 150, 152,
+     185, 152, 152, 154, 180, 181, 198, 215, 184, 147,
+      40, 102, 177, 224, 232, 242, 244, 244, 244, 235,
+     236, 239, 118, 121, 157, 193, 193, 194, 146, 148,
+     174, 181, 143,  96, 154, 183, 219, 156, 159, 200,
+     126, 128, 170, 174, 175, 193,  65,  39,   7, 232,
+     214, 192, 254, 241, 226, 246, 246, 248, 108,  65,
+      13, 142, 144, 185, 252, 224, 189, 138, 171, 213,
+      69, 122, 188, 239, 244, 249,  48,  49,  60, 176,
+     178, 209, 200, 201, 222, 252, 252, 253, 251, 251,
+     251, 162, 163, 187, 208, 208, 213, 169, 171, 205,
+     241, 234, 225, 255, 252, 249, 254, 248, 241, 140,
+     142, 169, 249, 186, 111,  33, 249,   4,   0,   0,
+       0,   0,   0,  44,   0,   0,   0,   0,  88,   0,
+      31,   0,   0,   6, 255,  64, 137, 112,  72,  44,
+      26, 143, 200, 164, 114, 201,  92,  62, 158, 208,
+     168, 116,  74, 173,  90, 175, 216, 108,  85, 168,
+     237, 122, 191,  15,  25, 163, 118, 209, 153,   0,
+      68, 128,  73, 119, 169,  49, 100,  86,  46, 120,
+      78, 127, 216,  60,  21,  93,  83,   8, 208,  85,
+      60,  54,  83, 114, 117, 132,  89,  32,  23,  38,
+      73,  38, 103,  72,  38,  23,  32,  82, 123, 146,
+     147,  69, 106,   9,  52,  21,  19,  53, 137, 138,
+      51,  51, 156, 141,  21, 100,  52,   9, 148, 166,
+     123,   0, 106, 126,  16,  21, 104,  67, 169, 106,
+     140,   9,   3, 159, 140,  18, 176, 182,   0,  23,
+      21, 101,  67,  21,  80,  32,  52, 192,  52,  44,
+       6,  16,  15,   6,  23,  44,  81,  24,  81,  25,
+      81, 194,  80,  25,   6,  18,  12,  80,  23,  15,
+     169,  15, 172, 155, 105,  33,   7,   4, 158,  46,
+       0,  33,   3,   7,   7,  51,   7, 139, 231, 225,
+       7,  25, 124,  23,  23,  52, 190,  19,   4, 205,
+      44,  27,   4,   4,  19,  57,  15,  33,  15,  32,
+      54,  64, 168, 241,   0,   5,  10,  28, 255,  54,
+     160, 120, 128, 163, 160,  65,   2,  15, 244, 229,
+     200, 113, 162,  26,   4,  20, 252,  22, 130, 128,
+      48,  98, 131,  30,  34,  38, 102, 208,  58,  64,
+     203,   4,  73, 115,   3,   6, 184, 152,  69,  75,
+     228,   1,  87,  38,  80, 204,  19, 242, 235,   9,
+      54,  31,   4,  78, 212, 152, 192, 128,   1,   8,
+     255,  31,  79,  78, 108,  99, 245, 239,  24,   3,
+     136,  16,  32, 212, 139,  24,  34,  83,   8,   3,
+      62,  33, 128,  56,  90,   3,  68, 136,  17, 173,
+     138, 176,  76,  16, 114,  64,   2, 145,   4,   0,
+     136, 196, 128, 129,  22, 215, 146,  66,  50, 224,
+     248,  40,  33, 147,  62,   2,  11,  39, 120, 120,
+      48, 162,  33,  10,   2,  44,  62,  64, 156, 144,
+     244,  31, 129,  17,  12,  31, 240, 157, 240,  76,
+     238, 131,  12,   4, 160, 110,   4,   1, 130, 192,
+       6,   6,  33, 112, 212,  48, 226, 195, 220,  25,
+     145,  95, 189, 118,  77,  64,  50, 236, 172,  79,
+      66,  92, 140,  96,  11,   0,  71,  78,  12,  39,
+      12, 108, 200,  71,  32,  68, 190,  16,  38,  70,
+      56,  54, 120,  87,  71, 136,  16,  25,  70,  36,
+     160, 141,  65,  33,  10,  12,  57,  13,  36, 240,
+     173,  15,  64,   2,  31,  58, 186, 189,  34,  96,
+     238,  86,  73,  90, 198,  75, 146,  12,   1, 128,
+     249, 203, 208,  62,  74,   9,  49,  96,   0,   3,
+      53,   9,   6,  78, 220,  78, 141, 218, 251, 137,
+      19, 168, 199, 163, 230,  46, 254, 246, 120, 247,
+     169, 193, 183, 127, 234,  34,  67,   6,  63,  51,
+     249, 156,  12,  55, 160, 181,  57, 114, 255, 137,
+      52,   3, 127,  62,  12, 129,  65, 118,  74, 112,
+     247,  29, 120, 219,  81, 163, 224, 130, 224,  61,
+      40, 225, 130,  15, 222, 162,  74,  60, 160, 116,
+     181,  95,   6,  36, 189, 212, 255, 225, 103,  39,
+      97, 224,  74, 119, 186, 157,  98, 162,  18, 169,
+     172,  65,   3,  13,  40, 184, 178, 149,  14,   9,
+     160,  97,   2,  87,  18, 204, 104,  66,  89,  51,
+      24,  23, 163,  16,  62, 132, 224, 195,  90,  39,
+       6, 121, 132,  37,  58, 176, 136, 195,  59,  46,
+     152, 133,  98, 135, 174,   8, 129, 129, 143,  56,
+      36, 160,  93,  33,  84,  82,  97,   3,  11,  12,
+     136, 128,   3,  66, 227,  44,  49,   2, 110,  67,
+     248, 224, 131,   6,  34,  48, 176, 204,   3, 131,
+      84, 169, 230,  19,  44, 128, 144, 195,   6,  71,
+     190, 179,   4,  26,  46, 136, 169,   1,  10,  57,
+     236, 192,   2,  15,  79, 164, 185, 166, 154,  55,
+     124, 192, 192, 155,   8, 228,  54, 130,  11, 136,
+     134,  86, 167, 152,  99,  34, 176,  65,  14,  12,
+     124,  16,   8,  20, 126,  62, 176,   2,   5,  20,
+     188, 160, 233, 166, 155,  58, 224, 105,   4,  61,
+     252,  73,  69, 160,  59,  12,  42,   2,  10,   8,
+      32, 160, 193, 170, 171, 166, 138, 130,   8, 144,
+     238, 240,   1, 159, 145,  72,   0,   5,  15,  20,
+      56,  16,  65,   4,  63,   4, 224, 171,   2,   1,
+       0, 171, 192, 176, 195,   6,  32, 234,  21, 129,
+     126,  48,  85,  79, 204,  50,  43, 235,   7,  55,
+     196,  97, 171, 165, 159, 254, 240, 195, 176,  63,
+     188, 240,   0, 173,  80, 244, 192, 194, 153,   2,
+     192, 113, 236, 184, 114, 172,  96, 174, 185, 152,
+      82, 160, 255, 133,   7,  13,  20, 240, 132,  12,
+       5, 196,  80, 192,  92,  15, 192,  32, 175,   0,
+      15,  88,  16, 195, 190,  22, 148, 224, 238,  19,
+     250, 242,  27, 176, 188, 226, 198, 128, 205, 190,
+     252, 202,  96, 111,   1, 248,  62, 128, 112,   1,
+      22,  80, 106, 235,  11,  14,  80, 188, 107, 175,
+     190, 250, 106,  45, 198,   1, 144, 192, 193,  19,
+       5,  52, 208,  64,  24,  29, 116,  96, 111,   3,
+     240,  54,   0,  67, 200,   2,   8, 160,  50,  12,
+      30, 216,  11, 133, 203,  48, 192,  76,  51,  12,
+     237,  62, 112,  65, 187,  54, 216, 107, 178,   7,
+      49, 168,  28,  52, 190, 237, 194,  80, 178, 196,
+      43, 108,  28, 172,   2,  11, 120, 204, 193, 211,
+      17, 112, 176, 235, 211,  28, 236, 240,  68,   7,
+      33, 151, 128, 179, 184,  45,  55,  32,  64, 180,
+      22, 120, 224, 114, 203,  10, 199,  48, 179, 215,
+     225, 186,  12, 178, 217,  33, 163,  92, 175, 217,
+      22, 120, 125, 131,  13, 242,  62, 224, 117, 189,
+      35, 247,  41, 129,   3, 196,  50, 189,  64,  11,
+      36, 216,  48, 183,  29,  79,   4,  98, 195, 164,
+      46, 119,  80, 180, 217, 103,  75, 225, 178, 200,
+       2, 200, 252, 196, 227, 104, 139,  44, 242,   5,
+      50,  52, 160,  56,  12, 111,  63, 160, 246,  19,
+     246, 218,  96, 121, 206, 122, 191, 224, 247, 223,
+      45, 164, 238, 244, 174, 172,  63, 173, 238,   3,
+       5, 152,  28,  50, 206,  17,  43,  76, 154,  51,
+     232,  93,  67,  33, 185, 231, 121, 243,  46,  64,
+      12,  29,  60,  80, 130, 208, 193, 203, 204,  46,
+     231,  50,  96, 109, 119, 205,  13, 208, 139, 166,
+     173,  42, 144, 176,  64,  10, 212,  87, 159, 250,
+       2, 216, 103, 191, 192,  14, 129, 168, 252, 132,
+     202,  33,   7,  93, 188, 230, 138, 139, 221,   0,
+     191,  56, 239, 203, 240, 249,  49,  88, 160, 118,
+     220,  43, 155, 189, 115, 204, 140, 227, 172, 120,
+     243, 118, 135, 139, 245, 164, 149,  78,  74, 248,
+     220, 130, 187, 193, 224,  30,  16,  51, 113, 149,
+     160,   4,  54, 208,  90,   9, 102,  86,  51,  56,
+     196, 172, 102,  98, 171,  25,  12,  74, 240,  64,
+     152, 197, 204,  38,  53, 139,  88, 189,  90, 182,
+     192, 201, 213, 236,  76,  48, 179, 129,   5,  96,
+     166, 183, 113, 153,  80,  77,  66,  74, 161,  10,
       41,  17,   4,   0,  59,   0 };
- 
+
 static int eaccelerator_last_startup(zend_extension *extension) {
   int ret;
   extension->startup = last_startup;

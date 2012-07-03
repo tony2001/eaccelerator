@@ -170,11 +170,21 @@ static void dump_array(int nb,void *pos,char type)
 }
 #endif
 
-#define SET_TO_NOP(op) \
-  (op)->opcode = ZEND_NOP; \
-  (op)->op1.op_type = IS_UNUSED; \
-  (op)->op2.op_type = IS_UNUSED; \
-  (op)->result.op_type = IS_UNUSED;
+#ifdef ZEND_ENGINE_2_4	
+	#define SET_TO_NOP(op) \
+	  (op)->opcode = ZEND_NOP; \
+	  (op)->op1_type = IS_UNUSED; \
+	  (op)->op2_type = IS_UNUSED; \
+	  (op)->result_type = IS_UNUSED;
+#else
+	#define SET_TO_NOP(op) \
+	  (op)->opcode = ZEND_NOP; \
+	  (op)->op1.op_type = IS_UNUSED; \
+	  (op)->op2.op_type = IS_UNUSED; \
+	  (op)->result.op_type = IS_UNUSED;
+#endif
+
+
 
 static void compute_live_var(BB* bb, zend_op_array* op_array, char* global)
 {
@@ -202,6 +212,18 @@ static void compute_live_var(BB* bb, zend_op_array* op_array, char* global)
       zend_op* end = op + p->len;
       memset(def, 0, op_array->T * sizeof(char));
       while (op < end) {
+#ifdef ZEND_ENGINE_2_4	
+        if ((op->op1_type == IS_VAR || op->op1_type == IS_TMP_VAR) &&
+            !def[VAR_NUM(op->op1.var)] && !global[VAR_NUM(op->op1.var)]) {
+          global[VAR_NUM(op->op1.var)] = 1;
+        }
+        if ((op->op2_type == IS_VAR || op->op2_type == IS_TMP_VAR) &&
+            !def[VAR_NUM(op->op2.var)] && !global[VAR_NUM(op->op2.var)]) {
+          if (op->opcode != ZEND_OP_DATA) {
+            global[VAR_NUM(op->op2.var)] = 1;
+          }
+        }
+#else
         if ((op->op1.op_type == IS_VAR || op->op1.op_type == IS_TMP_VAR) &&
             !def[VAR_NUM(op->op1.u.var)] && !global[VAR_NUM(op->op1.u.var)]) {
           global[VAR_NUM(op->op1.u.var)] = 1;
@@ -212,6 +234,8 @@ static void compute_live_var(BB* bb, zend_op_array* op_array, char* global)
             global[VAR_NUM(op->op2.u.var)] = 1;
           }
         }
+#endif
+
 #ifdef ZEND_ENGINE_2_3
         if ((op->opcode == ZEND_DECLARE_INHERITED_CLASS || op->opcode == ZEND_DECLARE_INHERITED_CLASS_DELAYED) &&
 #else
@@ -221,7 +245,23 @@ static void compute_live_var(BB* bb, zend_op_array* op_array, char* global)
             !global[VAR_NUM(op->extended_value)]) {
           global[VAR_NUM(op->extended_value)] = 1;
         }
-        if ((op->result.op_type == IS_VAR &&
+#ifdef ZEND_ENGINE_2_4	
+          if ((op->result_type == IS_VAR &&
+             (op->opcode == ZEND_RECV || op->opcode == ZEND_RECV_INIT)) || 
+//              (op->result.u.EA.type & EXT_TYPE_UNUSED) == 0)) ||
+            (op->result_type == IS_TMP_VAR)) {
+          if (!def[VAR_NUM(op->result.var)] && !global[VAR_NUM(op->result.var)]) {
+            switch (op->opcode) {
+              case ZEND_RECV:
+              case ZEND_RECV_INIT:
+              case ZEND_ADD_ARRAY_ELEMENT:
+                global[VAR_NUM(op->result.var)] = 1;
+             }
+          }
+          def[VAR_NUM(op->result.var)] = 1;
+        }
+#else
+		  if ((op->result.op_type == IS_VAR &&
              (op->opcode == ZEND_RECV || op->opcode == ZEND_RECV_INIT ||
               (op->result.u.EA.type & EXT_TYPE_UNUSED) == 0)) ||
             (op->result.op_type == IS_TMP_VAR)) {
@@ -235,6 +275,9 @@ static void compute_live_var(BB* bb, zend_op_array* op_array, char* global)
           }
           def[VAR_NUM(op->result.u.var)] = 1;
         }
+#endif
+
+        
         op++;
       }
       p = p->next;
@@ -258,19 +301,36 @@ static void compute_live_var(BB* bb, zend_op_array* op_array, char* global)
       memset(used, 0, op_array->T * sizeof(char));
       while (op < end) {
         end--;
+#ifdef ZEND_ENGINE_2_4	
+        if (((end->result_type == IS_VAR &&
+             (end->opcode == ZEND_RECV || end->opcode == ZEND_RECV_INIT)) ||
+//              (end->result.u.EA.type & EXT_TYPE_UNUSED) == 0)) ||
+             (end->result_type == IS_TMP_VAR)) &&
+            !global[VAR_NUM(end->result.var)] && !used[VAR_NUM(end->result.var)]) {
+#else
         if (((end->result.op_type == IS_VAR &&
              (end->opcode == ZEND_RECV || end->opcode == ZEND_RECV_INIT ||
               (end->result.u.EA.type & EXT_TYPE_UNUSED) == 0)) ||
              (end->result.op_type == IS_TMP_VAR)) &&
             !global[VAR_NUM(end->result.u.var)] && !used[VAR_NUM(end->result.u.var)]) {
+#endif
+
            switch(end->opcode) {
              case ZEND_JMPZ_EX:
                end->opcode = ZEND_JMPZ;
-               end->result.op_type = IS_UNUSED;
+#ifdef ZEND_ENGINE_2_4	
+				end->result_type = IS_UNUSED;
+#else
+				end->result.op_type = IS_UNUSED;
+#endif
                break;
              case ZEND_JMPNZ_EX:
                end->opcode = ZEND_JMPNZ;
-               end->result.op_type = IS_UNUSED;
+#ifdef ZEND_ENGINE_2_4	
+				end->result_type = IS_UNUSED;
+#else
+				end->result.op_type = IS_UNUSED;
+#endif
                break;
              case ZEND_ASSIGN_ADD:
              case ZEND_ASSIGN_SUB:
@@ -291,14 +351,22 @@ static void compute_live_var(BB* bb, zend_op_array* op_array, char* global)
              case ZEND_ASSIGN_REF:
              case ZEND_DO_FCALL:
              case ZEND_DO_FCALL_BY_NAME:
+#ifdef ZEND_ENGINE_2_4	
+				 //TODO:
+#else
                if (end->result.op_type == IS_VAR) {
                  end->result.u.EA.type |= EXT_TYPE_UNUSED;
                }
+#endif
                break;
              case ZEND_UNSET_VAR:
              case ZEND_UNSET_DIM:
              case ZEND_UNSET_OBJ:
+#ifdef ZEND_ENGINE_2_4	
+               end->result_type = IS_UNUSED;
+#else
                end->result.op_type = IS_UNUSED;
+#endif
                break;
              case ZEND_RECV:
              case ZEND_RECV_INIT:
@@ -317,20 +385,57 @@ static void compute_live_var(BB* bb, zend_op_array* op_array, char* global)
 #endif
               break;
             default:
+#ifdef ZEND_ENGINE_2_4	
+              if (end->op1_type == IS_CONST) {
+                zval_dtor(end->op1.zv);
+              }
+              if (end->op2_type == IS_CONST) {
+                zval_dtor(end->op2.zv);
+              }
+#else
               if (end->op1.op_type == IS_CONST) {
                 zval_dtor(&end->op1.u.constant);
               }
               if (end->op2.op_type == IS_CONST) {
                 zval_dtor(&end->op2.u.constant);
               }
+#endif
               SET_TO_NOP(end);
           }
-        } else if (end->result.op_type == IS_VAR &&
+        } else 
+#ifdef ZEND_ENGINE_2_4	
+            //TODO:
+#else
+			if (end->result.op_type == IS_VAR &&
                    (end->result.u.EA.type & EXT_TYPE_UNUSED) != 0 &&
                    end->opcode != ZEND_RECV && end->opcode != ZEND_RECV_INIT &&
                    used[VAR_NUM(end->result.u.var)]) {
           end->result.u.EA.type &= ~EXT_TYPE_UNUSED;
         }
+#endif
+
+#ifdef ZEND_ENGINE_2_4	
+        if ((end->result_type == IS_VAR &&
+            (end->opcode == ZEND_RECV || end->opcode == ZEND_RECV_INIT)) ||
+//             (end->result.u.EA.type & EXT_TYPE_UNUSED) == 0)) ||
+            (end->result_type == IS_TMP_VAR)) {
+          switch (end->opcode) {
+            case ZEND_RECV:
+            case ZEND_RECV_INIT:
+            case ZEND_ADD_ARRAY_ELEMENT:
+              used[VAR_NUM(end->result.var)] = 1;
+              break;
+            default:
+              used[VAR_NUM(end->result.var)] = 0;
+           }
+        }
+        if (end->op1_type == IS_VAR || end->op1_type == IS_TMP_VAR) {
+          used[VAR_NUM(end->op1.var)] = 1;
+        }
+        if (end->op2_type == IS_VAR || end->op2_type == IS_TMP_VAR) {
+          used[VAR_NUM(end->op2.var)] = 1;
+        }
+#else
         if ((end->result.op_type == IS_VAR &&
             (end->opcode == ZEND_RECV || end->opcode == ZEND_RECV_INIT ||
              (end->result.u.EA.type & EXT_TYPE_UNUSED) == 0)) ||
@@ -351,6 +456,7 @@ static void compute_live_var(BB* bb, zend_op_array* op_array, char* global)
         if (end->op2.op_type == IS_VAR || end->op2.op_type == IS_TMP_VAR) {
           used[VAR_NUM(end->op2.u.var)] = 1;
         }
+#endif
 #ifdef ZEND_ENGINE_2_3
         if (end->opcode == ZEND_DECLARE_INHERITED_CLASS || end->opcode == ZEND_DECLARE_INHERITED_CLASS_DELAYED) {
 #else
@@ -474,12 +580,22 @@ static void del_bb(BB* bb)
   rm_bb(bb);
   while (op < end) {
     --end;
+#ifdef ZEND_ENGINE_2_4	
+    if (end->op1_type == IS_CONST) {
+      zval_dtor(end->op1.zv);
+    }
+    if (end->op2_type == IS_CONST) {
+      zval_dtor(end->op2.zv);
+    }
+#else
     if (end->op1.op_type == IS_CONST) {
       zval_dtor(&end->op1.u.constant);
     }
     if (end->op2.op_type == IS_CONST) {
       zval_dtor(&end->op2.u.constant);
     }
+#endif
+
     SET_TO_NOP(end);
   }
   bb->len  = 0;
@@ -581,21 +697,40 @@ jmp_znz:
             if (p->jmp_ext == p->jmp_2) {
               op->opcode = ZEND_JMP;
               op->extended_value = 0;
+#ifdef ZEND_ENGINE_2_4	
+              op->op1_type = IS_UNUSED;
+              op->op2_type = IS_UNUSED;
+#else
               op->op1.op_type = IS_UNUSED;
               op->op2.op_type = IS_UNUSED;
+#endif
               p->jmp_1 = p->jmp_2;
               p->jmp_2 = NULL;
               p->jmp_ext = NULL;
               ok = 0;
               goto jmp;
-            } else if (op->op1.op_type == IS_CONST) {
+            } else 
+#ifdef ZEND_ENGINE_2_4	
+				if (op->op1_type == IS_CONST) {
+#else
+				if (op->op1.op_type == IS_CONST) {
+#endif
               /* JMPZNZ  0,L1,L2  =>  JMP L1
               */
+#ifdef ZEND_ENGINE_2_4	
+              if (!zend_is_true(op->op1.zv)) {
+#else
               if (!zend_is_true(&op->op1.u.constant)) {
+#endif
                 op->opcode = ZEND_JMP;
                 op->extended_value = 0;
-                op->op1.op_type = IS_UNUSED;
-                op->op2.op_type = IS_UNUSED;
+#ifdef ZEND_ENGINE_2_4	
+              op->op1_type = IS_UNUSED;
+              op->op2_type = IS_UNUSED;
+#else
+              op->op1.op_type = IS_UNUSED;
+              op->op2.op_type = IS_UNUSED;
+#endif
                 if (p->jmp_ext != p->jmp_2) {
                   BB_DEL_PRED(p->jmp_ext, p);
                   RM_BB(p->jmp_ext);
@@ -611,8 +746,13 @@ jmp_znz:
               } else {
                 op->opcode = ZEND_JMP;
                 op->extended_value = 0;
-                op->op1.op_type = IS_UNUSED;
-                op->op2.op_type = IS_UNUSED;
+#ifdef ZEND_ENGINE_2_4	
+              op->op1_type = IS_UNUSED;
+              op->op2_type = IS_UNUSED;
+#else
+              op->op1.op_type = IS_UNUSED;
+              op->op2.op_type = IS_UNUSED;
+#endif
                 if (p->jmp_ext != p->jmp_2) {
                   BB_DEL_PRED(p->jmp_2, p);
                   RM_BB(p->jmp_2);
@@ -644,7 +784,12 @@ jmp_znz:
               ok = 0;
               goto jmp_nz;
             } else if (p->jmp_2->len == 1 &&
+#ifdef ZEND_ENGINE_2_4	
+                       op->op1_type == IS_TMP_VAR) {
+#else
                        op->op1.op_type == IS_TMP_VAR) {
+#endif
+
             /*     JMPZNZ $x,L1,L2  =>  JMPZNZ $x,L3,L2
                    ...                  ...
                L1: JMPZ   $x,L3         JMPZ   $x,L3
@@ -655,8 +800,13 @@ jmp_znz:
             */
             if        ((p->jmp_2->start->opcode == ZEND_JMPZ ||
                         p->jmp_2->start->opcode == ZEND_JMPZNZ) &&
+#ifdef ZEND_ENGINE_2_4	
+                       p->jmp_2->start->op1_type == IS_TMP_VAR &&
+                       op->op1.var == p->jmp_2->start->op1.var) {
+#else
                        p->jmp_2->start->op1.op_type == IS_TMP_VAR &&
                        op->op1.u.var == p->jmp_2->start->op1.u.var) {
+#endif
               if (p->jmp_2 != p->jmp_ext) {
                 BB_DEL_PRED(p->jmp_2, p);
                 RM_BB(p->jmp_2);
@@ -670,8 +820,13 @@ jmp_znz:
                L1: JMPNZ  $x,L3         JMPNZ  $x,L3
             */
             } else if (p->jmp_2->start->opcode == ZEND_JMPNZ &&
+#ifdef ZEND_ENGINE_2_4	
+                       p->jmp_2->start->op1_type == IS_TMP_VAR &&
+                       op->op1.var == p->jmp_2->start->op1.var) {
+#else
                        p->jmp_2->start->op1.op_type == IS_TMP_VAR &&
                        op->op1.u.var == p->jmp_2->start->op1.u.var) {
+#endif
               if (p->jmp_2 != p->jmp_ext) {
                 BB_DEL_PRED(p->jmp_2, p);
                 RM_BB(p->jmp_2);
@@ -685,8 +840,13 @@ jmp_znz:
                L2: JMPNZ  $x,L3         JMPNZ  $x,L3
             */
             } else if (p->jmp_ext->start->opcode == ZEND_JMPNZ &&
+#ifdef ZEND_ENGINE_2_4	
+                       p->jmp_ext->start->op1_type == IS_TMP_VAR &&
+                       op->op1.var == p->jmp_ext->start->op1.var) {
+#else
                        p->jmp_ext->start->op1.op_type == IS_TMP_VAR &&
                        op->op1.u.var == p->jmp_ext->start->op1.u.var) {
+#endif
               if (p->jmp_2 != p->jmp_ext) {
                 BB_DEL_PRED(p->jmp_ext, p);
                 RM_BB(p->jmp_ext);
@@ -700,8 +860,13 @@ jmp_znz:
                L2: JMPZNZ $x,L3,L4      JMPZNZ $x,L3,L4
             */
             } else if (p->jmp_ext->start->opcode == ZEND_JMPZNZ &&
+#ifdef ZEND_ENGINE_2_4	
+                       p->jmp_ext->start->op1_type == IS_TMP_VAR &&
+                       op->op1.var == p->jmp_ext->start->op1.var) {
+#else
                        p->jmp_ext->start->op1.op_type == IS_TMP_VAR &&
                        op->op1.u.var == p->jmp_ext->start->op1.u.var) {
+#endif
               if (p->jmp_2 != p->jmp_ext) {
                 BB_DEL_PRED(p->jmp_ext, p);
                 RM_BB(p->jmp_ext);
@@ -715,8 +880,13 @@ jmp_znz:
                L2: JMPZ   $x,L3         JMPZ   $x,L3
             */
             } else if (p->jmp_ext->start->opcode == ZEND_JMPZ &&
+#ifdef ZEND_ENGINE_2_4	
+                       p->jmp_ext->start->op1_type == IS_TMP_VAR &&
+                       op->op1.var == p->jmp_ext->start->op1.var) {
+#else
                        p->jmp_ext->start->op1.op_type == IS_TMP_VAR &&
                        op->op1.u.var == p->jmp_ext->start->op1.u.var) {
+#endif
               if (p->jmp_2 != p->jmp_ext) {
                 BB_DEL_PRED(p->jmp_ext, p);
                 RM_BB(p->jmp_ext);
@@ -758,13 +928,24 @@ jmp_z:
               --(p->len);
               ok = 0;
               break;
+#ifdef ZEND_ENGINE_2_4	
+            } else if (op->op1_type == IS_CONST) {
+#else
             } else if (op->op1.op_type == IS_CONST) {
+#endif
               /* JMPZ  0,L1  =>  JMP L1
               */
+#ifdef ZEND_ENGINE_2_4	
+              if (!zend_is_true(op->op1.zv)) {
+                op->opcode = ZEND_JMP;
+                op->op1_type = IS_UNUSED;
+                op->op2_type = IS_UNUSED;
+#else
               if (!zend_is_true(&op->op1.u.constant)) {
                 op->opcode = ZEND_JMP;
                 op->op1.op_type = IS_UNUSED;
                 op->op2.op_type = IS_UNUSED;
+#endif
                 if (p->follow != p->jmp_2) {
                   BB_DEL_PRED(p->follow, p);
                   RM_BB(p->follow);
@@ -803,7 +984,11 @@ jmp_z:
               ok = 0;
               goto jmp_znz;
             } else if (p->jmp_2->len == 1 &&
+#ifdef ZEND_ENGINE_2_4	
+                       op->op1_type == IS_TMP_VAR) {
+#else
                        op->op1.op_type == IS_TMP_VAR) {
+#endif
             /*     JMPZ $x,L1  =>  JMPZ $x,L2
                    ...             ...
                L1: JMPZ $x,L2      JMPZ $x,L2
@@ -814,8 +999,13 @@ jmp_z:
             */
             if       ((p->jmp_2->start->opcode == ZEND_JMPZ ||
                        p->jmp_2->start->opcode == ZEND_JMPZNZ) &&
+#ifdef ZEND_ENGINE_2_4	
+                      p->jmp_2->start->op1_type == IS_TMP_VAR &&
+                      op->op1.var == p->jmp_2->start->op1.var) {
+#else
                       p->jmp_2->start->op1.op_type == IS_TMP_VAR &&
                       op->op1.u.var == p->jmp_2->start->op1.u.var) {
+#endif
               if (p->jmp_2 != p->follow) {
                 BB_DEL_PRED(p->jmp_2, p);
                 RM_BB(p->jmp_2);
@@ -829,8 +1019,13 @@ jmp_z:
                L1: JMPNZ $x,L2      JMPNZ $x,L2
             */
             } else if (p->jmp_2->start->opcode == ZEND_JMPNZ &&
+#ifdef ZEND_ENGINE_2_4	
+                       p->jmp_2->start->op1_type == IS_TMP_VAR &&
+                       op->op1.var == p->jmp_2->start->op1.var) {
+#else
                        p->jmp_2->start->op1.op_type == IS_TMP_VAR &&
                        op->op1.u.var == p->jmp_2->start->op1.u.var) {
+#endif
               if (p->jmp_2 != p->follow) {
                 BB_DEL_PRED(p->jmp_2, p);
                 RM_BB(p->jmp_2);
@@ -852,13 +1047,24 @@ jmp_nz:
               --(p->len);
               ok = 0;
               break;
+#ifdef ZEND_ENGINE_2_4	
+            } else if (op->op1_type == IS_CONST) {
+#else
             } else if (op->op1.op_type == IS_CONST) {
+#endif
               /* JMPNZ  1,L1  =>  JMP L1
               */
+#ifdef ZEND_ENGINE_2_4	
+              if (zend_is_true(op->op1.zv)) {
+                op->opcode = ZEND_JMP;
+                op->op1_type = IS_UNUSED;
+                op->op2_type = IS_UNUSED;
+#else
               if (zend_is_true(&op->op1.u.constant)) {
                 op->opcode = ZEND_JMP;
                 op->op1.op_type = IS_UNUSED;
                 op->op2.op_type = IS_UNUSED;
+#endif
                 if (p->follow != p->jmp_2) {
                   BB_DEL_PRED(p->follow, p);
                   RM_BB(p->follow);
@@ -902,10 +1108,17 @@ jmp_nz:
                L1: JMPNZ $x,L2      JMPNZ $x,L2
             */
             } else if (p->jmp_2->len == 1 &&
+#ifdef ZEND_ENGINE_2_4	
+                       op->op1_type == IS_TMP_VAR) {
+            if(p->jmp_2->start->opcode == ZEND_JMPNZ &&
+                       p->jmp_2->start->op1_type == IS_TMP_VAR &&
+                       op->op1.var == p->jmp_2->start->op1.var) {
+#else
                        op->op1.op_type == IS_TMP_VAR) {
             if        (p->jmp_2->start->opcode == ZEND_JMPNZ &&
                        p->jmp_2->start->op1.op_type == IS_TMP_VAR &&
                        op->op1.u.var == p->jmp_2->start->op1.u.var) {
+#endif
               if (p->jmp_2 != p->follow) {
                 BB_DEL_PRED(p->jmp_2, p);
                 RM_BB(p->jmp_2);
@@ -918,9 +1131,15 @@ jmp_nz:
                    ...               ...
                L1: JMPZ   $x,L2      JMPZ $x,L2
             */
+#ifdef ZEND_ENGINE_2_4	
+            } else if (p->jmp_2->start->opcode == ZEND_JMPZ &&
+                       p->jmp_2->start->op1_type == IS_TMP_VAR &&
+                       op->op1.var == p->jmp_2->start->op1.var) {
+#else
             } else if (p->jmp_2->start->opcode == ZEND_JMPZ &&
                        p->jmp_2->start->op1.op_type == IS_TMP_VAR &&
                        op->op1.u.var == p->jmp_2->start->op1.u.var) {
+#endif
               if (p->jmp_2 != p->follow) {
                 BB_DEL_PRED(p->jmp_2, p);
                 RM_BB(p->jmp_2);
@@ -933,9 +1152,15 @@ jmp_nz:
                    ...                   ...
                L1: JMPZNZ $x,L2,L3      JMPZNZ $x,L2,L3
             */
+#ifdef ZEND_ENGINE_2_4	
+            } else if (p->jmp_2->start->opcode == ZEND_JMPZNZ &&
+                       p->jmp_2->start->op1_type == IS_TMP_VAR &&
+                       op->op1.var == p->jmp_2->start->op1.var) {
+#else
             } else if (p->jmp_2->start->opcode == ZEND_JMPZNZ &&
                        p->jmp_2->start->op1.op_type == IS_TMP_VAR &&
                        op->op1.u.var == p->jmp_2->start->op1.u.var) {
+#endif
               if (p->jmp_2 != p->follow) {
                 BB_DEL_PRED(p->jmp_2, p);
                 RM_BB(p->jmp_2);
@@ -952,9 +1177,15 @@ jmp_z_ex:
             /* L1: JMPZ_EX  $x,L1+1,$x  =>  NOP
             */
             if (p->follow == p->jmp_2 &&
+#ifdef ZEND_ENGINE_2_4	
+                op->op1_type == IS_TMP_VAR &&
+                op->result_type == IS_TMP_VAR &&
+                op->op1.var == op->result.var) {
+#else
                 op->op1.op_type == IS_TMP_VAR &&
                 op->result.op_type == IS_TMP_VAR &&
                 op->op1.u.var == op->result.u.var) {
+#endif
               p->jmp_2   = NULL;
               SET_TO_NOP(op);
               --(p->len);
@@ -965,11 +1196,19 @@ jmp_z_ex:
             } else if (p->follow == p->jmp_2) {
               p->jmp_2   = NULL;
               op->opcode = ZEND_BOOL;
+#ifdef ZEND_ENGINE_2_4	
+              op->op2_type = IS_UNUSED;
+#else
               op->op2.op_type = IS_UNUSED;
+#endif
               ok = 0;
               break;
             } else if (p->jmp_2->len == 1 &&
+#ifdef ZEND_ENGINE_2_4	
+                       op->result_type == IS_TMP_VAR) {
+#else
                        op->result.op_type == IS_TMP_VAR) {
+#endif
             /*     JMPZ_EX ?,L1,$x  =>  JMPZ_EX ?,L2,$x
                    ...                  ...
                L1: JMPZ    $x,L2        JMPZ    $x,L2
@@ -982,6 +1221,17 @@ jmp_z_ex:
                    ...                  ...
                L1: JMPZ_EX $x,L2,$x     JMPZ_EX $x,L2,$x
             */
+#ifdef ZEND_ENGINE_2_4	
+            if       (((p->jmp_2->start->opcode == ZEND_JMPZ ||
+                         p->jmp_2->start->opcode == ZEND_JMPZNZ) &&
+                        p->jmp_2->start->op1_type == IS_TMP_VAR &&
+                        op->result.var == p->jmp_2->start->op1.var) ||
+                       (p->jmp_2->start->opcode == ZEND_JMPZ_EX &&
+                        p->jmp_2->start->op1_type == IS_TMP_VAR &&
+                        p->jmp_2->start->result_type == IS_TMP_VAR &&
+                        op->result.var == p->jmp_2->start->op1.var &&
+                        op->result.var == p->jmp_2->start->result.var)) {
+#else
             if       (((p->jmp_2->start->opcode == ZEND_JMPZ ||
                          p->jmp_2->start->opcode == ZEND_JMPZNZ) &&
                         p->jmp_2->start->op1.op_type == IS_TMP_VAR &&
@@ -991,6 +1241,8 @@ jmp_z_ex:
                         p->jmp_2->start->result.op_type == IS_TMP_VAR &&
                         op->result.u.var == p->jmp_2->start->op1.u.var &&
                         op->result.u.var == p->jmp_2->start->result.u.var)) {
+#endif
+
               if (p->jmp_2 != p->follow) {
                 BB_DEL_PRED(p->jmp_2, p);
                 RM_BB(p->jmp_2);
@@ -1007,6 +1259,16 @@ jmp_z_ex:
                    ...                   ...
                L1: JMPNZ_EX $x,L2,$x     JMPNZ_EX $x,L2,$x
             */
+#ifdef ZEND_ENGINE_2_4	
+            } else if ((p->jmp_2->start->opcode == ZEND_JMPNZ &&
+                        p->jmp_2->start->op1_type == IS_TMP_VAR &&
+                        op->result.var == p->jmp_2->start->op1.var) ||
+                       (p->jmp_2->start->opcode == ZEND_JMPNZ_EX &&
+                        p->jmp_2->start->op1_type == IS_TMP_VAR &&
+                        p->jmp_2->start->result_type == IS_TMP_VAR &&
+                        op->result.var == p->jmp_2->start->op1.var &&
+                        op->result.var == p->jmp_2->start->result.var)) {
+#else
             } else if ((p->jmp_2->start->opcode == ZEND_JMPNZ &&
                         p->jmp_2->start->op1.op_type == IS_TMP_VAR &&
                         op->result.u.var == p->jmp_2->start->op1.u.var) ||
@@ -1015,6 +1277,7 @@ jmp_z_ex:
                         p->jmp_2->start->result.op_type == IS_TMP_VAR &&
                         op->result.u.var == p->jmp_2->start->op1.u.var &&
                         op->result.u.var == p->jmp_2->start->result.u.var)) {
+#endif
               if (p->jmp_2 != p->follow) {
                 BB_DEL_PRED(p->jmp_2, p);
                 RM_BB(p->jmp_2);
@@ -1027,9 +1290,15 @@ jmp_z_ex:
                    ...                   ...
                L1: BOOL    $x,$y         BOOL    $x,$y
             */
+#ifdef ZEND_ENGINE_2_4	
+            } else if (p->jmp_2->start->opcode == ZEND_BOOL &&
+                       p->jmp_2->start->op1_type == IS_TMP_VAR &&
+                       op->result.var == p->jmp_2->start->op1.var) {
+#else
             } else if (p->jmp_2->start->opcode == ZEND_BOOL &&
                        p->jmp_2->start->op1.op_type == IS_TMP_VAR &&
                        op->result.u.var == p->jmp_2->start->op1.u.var) {
+#endif
               memcpy(&op->result, &p->jmp_2->start->result, sizeof(zval));
               if (p->jmp_2 != p->follow) {
                 BB_DEL_PRED(p->jmp_2, p);
@@ -1043,11 +1312,19 @@ jmp_z_ex:
                    ...                   ...
                L1: FREE    $x            FREE    $x
             */
+#ifdef ZEND_ENGINE_2_4	
+            } else if (p->jmp_2->start->opcode == ZEND_FREE &&
+                       p->jmp_2->start->op1_type == IS_TMP_VAR &&
+                       op->result.var == p->jmp_2->start->op1.var) {
+              op->opcode = ZEND_JMPZ;
+              op->result_type = IS_UNUSED;
+#else
             } else if (p->jmp_2->start->opcode == ZEND_FREE &&
                        p->jmp_2->start->op1.op_type == IS_TMP_VAR &&
                        op->result.u.var == p->jmp_2->start->op1.u.var) {
               op->opcode = ZEND_JMPZ;
               op->result.op_type = IS_UNUSED;
+#endif
               if (p->jmp_2 != p->follow) {
                 BB_DEL_PRED(p->jmp_2, p);
                 RM_BB(p->jmp_2);
@@ -1061,10 +1338,17 @@ jmp_z_ex:
                    ...                   ...
                L1: FREE    $x            FREE $x
             */
+#ifdef ZEND_ENGINE_2_4	
+            } else if (op->result_type == IS_TMP_VAR &&
+                       p->jmp_2->start->opcode == ZEND_FREE &&
+                       p->jmp_2->start->op1_type == IS_TMP_VAR &&
+                       op->result.var == p->jmp_2->start->op1.var) {
+#else
             } else if (op->result.op_type == IS_TMP_VAR &&
                        p->jmp_2->start->opcode == ZEND_FREE &&
                        p->jmp_2->start->op1.op_type == IS_TMP_VAR &&
                        op->result.u.var == p->jmp_2->start->op1.u.var) {
+#endif
               if (p->jmp_2->len > 1) {
                 /* splitting */
                 BB* new_bb = (p->jmp_2+1);
@@ -1094,7 +1378,11 @@ jmp_z_ex:
                   p->jmp_2->jmp_ext   = NULL;
                 }
                 op->opcode = ZEND_JMPZ;
+#ifdef ZEND_ENGINE_2_4	
+                op->result_type = IS_UNUSED;
+#else
                 op->result.op_type = IS_UNUSED;
+#endif
                 if (p->jmp_2->follow) {
                   new_bb->follow     = p->jmp_2->follow;
                   BB_ADD_PRED(new_bb->follow, new_bb);
@@ -1118,10 +1406,17 @@ jmp_z_ex:
 jmp_nz_ex:
             /* L1: JMPNZ_EX  $x,L1+1,$x  =>  NOP
             */
+#ifdef ZEND_ENGINE_2_4	
+            if (p->follow == p->jmp_2 &&
+                op->op1_type == IS_TMP_VAR &&
+                op->result_type == IS_TMP_VAR &&
+                op->op1.var == op->result.var) {
+#else
             if (p->follow == p->jmp_2 &&
                 op->op1.op_type == IS_TMP_VAR &&
                 op->result.op_type == IS_TMP_VAR &&
                 op->op1.u.var == op->result.u.var) {
+#endif
               p->jmp_2   = NULL;
               SET_TO_NOP(op);
               --(p->len);
@@ -1132,11 +1427,19 @@ jmp_nz_ex:
             } else if (p->follow == p->jmp_2) {
               p->jmp_2   = NULL;
               op->opcode = ZEND_BOOL;
+#ifdef ZEND_ENGINE_2_4	
+              op->op2_type = IS_UNUSED;
+#else
               op->op2.op_type = IS_UNUSED;
+#endif
               ok = 0;
               break;
             } else if (p->jmp_2->len == 1 &&
+#ifdef ZEND_ENGINE_2_4	
+                       op->result_type == IS_TMP_VAR) {
+#else
                        op->result.op_type == IS_TMP_VAR) {
+#endif
             /*     JMPNZ_EX ?,L1,$x  =>  JMPNZ_EX ?,L2,$x
                    ...                   ...
                L1: JMPNZ    $x,L2        JMPNZ    $x,L2
@@ -1145,6 +1448,16 @@ jmp_nz_ex:
                    ...                   ...
                L1: JMPNZ_EX $x,L2,$x     JMPNZ_EX $x,L2,$x
             */
+#ifdef ZEND_ENGINE_2_4	
+            if        ((p->jmp_2->start->opcode == ZEND_JMPNZ &&
+                        p->jmp_2->start->op1_type == IS_TMP_VAR &&
+                        op->result.var == p->jmp_2->start->op1.var) ||
+                       (p->jmp_2->start->opcode == ZEND_JMPNZ_EX &&
+                        p->jmp_2->start->op1_type == IS_TMP_VAR &&
+                        p->jmp_2->start->result_type == IS_TMP_VAR &&
+                        op->result.var == p->jmp_2->start->op1.var &&
+                        op->result.var == p->jmp_2->start->result.var)) {
+#else
             if        ((p->jmp_2->start->opcode == ZEND_JMPNZ &&
                         p->jmp_2->start->op1.op_type == IS_TMP_VAR &&
                         op->result.u.var == p->jmp_2->start->op1.u.var) ||
@@ -1153,6 +1466,7 @@ jmp_nz_ex:
                         p->jmp_2->start->result.op_type == IS_TMP_VAR &&
                         op->result.u.var == p->jmp_2->start->op1.u.var &&
                         op->result.u.var == p->jmp_2->start->result.u.var)) {
+#endif
               if (p->jmp_2 != p->follow) {
                 BB_DEL_PRED(p->jmp_2, p);
                 RM_BB(p->jmp_2);
@@ -1165,9 +1479,15 @@ jmp_nz_ex:
                    ...                    ...
                L1: JMPZNZ   $x,L2,L3      JMPZNZ   $x,L2,L3
             */
+#ifdef ZEND_ENGINE_2_4	
+            } else if (p->jmp_2->start->opcode == ZEND_JMPZNZ &&
+                       p->jmp_2->start->op1_type == IS_TMP_VAR &&
+                       op->result.var == p->jmp_2->start->op1.var) {
+#else
             } else if (p->jmp_2->start->opcode == ZEND_JMPZNZ &&
                        p->jmp_2->start->op1.op_type == IS_TMP_VAR &&
                        op->result.u.var == p->jmp_2->start->op1.u.var) {
+#endif
               if (p->jmp_2 != p->follow) {
                 BB_DEL_PRED(p->jmp_2, p);
                 RM_BB(p->jmp_2);
@@ -1184,6 +1504,16 @@ jmp_nz_ex:
                    ...                    ...
                L1: JMPZ_EX $x,L2,$x      JMPZ_EX $x,L2,$x
             */
+#ifdef ZEND_ENGINE_2_4	
+            } else if ((p->jmp_2->start->opcode == ZEND_JMPZ &&
+                        p->jmp_2->start->op1_type == IS_TMP_VAR &&
+                        op->result.var == p->jmp_2->start->op1.var) ||
+                       (p->jmp_2->start->opcode == ZEND_JMPZ_EX &&
+                        p->jmp_2->start->op1_type == IS_TMP_VAR &&
+                        p->jmp_2->start->result_type == IS_TMP_VAR &&
+                        op->result.var == p->jmp_2->start->op1.var &&
+                        op->result.var == p->jmp_2->start->result.var)) {
+#else
             } else if ((p->jmp_2->start->opcode == ZEND_JMPZ &&
                         p->jmp_2->start->op1.op_type == IS_TMP_VAR &&
                         op->result.u.var == p->jmp_2->start->op1.u.var) ||
@@ -1192,6 +1522,7 @@ jmp_nz_ex:
                         p->jmp_2->start->result.op_type == IS_TMP_VAR &&
                         op->result.u.var == p->jmp_2->start->op1.u.var &&
                         op->result.u.var == p->jmp_2->start->result.u.var)) {
+#endif
               if (p->jmp_2 != p->follow) {
                 BB_DEL_PRED(p->jmp_2, p);
                 RM_BB(p->jmp_2);
@@ -1204,9 +1535,15 @@ jmp_nz_ex:
                    ...                   ...
                L1: BOOL    $x,$y         BOOL    $x,$y
             */
+#ifdef ZEND_ENGINE_2_4	
+            } else if (p->jmp_2->start->opcode == ZEND_BOOL &&
+                       p->jmp_2->start->op1_type == IS_TMP_VAR &&
+                       op->result.var == p->jmp_2->start->op1.var) {
+#else
             } else if (p->jmp_2->start->opcode == ZEND_BOOL &&
                        p->jmp_2->start->op1.op_type == IS_TMP_VAR &&
                        op->result.u.var == p->jmp_2->start->op1.u.var) {
+#endif
               memcpy(&op->result, &p->jmp_2->start->result, sizeof(zval));
               if (p->jmp_2 != p->follow) {
                 BB_DEL_PRED(p->jmp_2, p);
@@ -1220,11 +1557,19 @@ jmp_nz_ex:
                    ...                    ...
                L1: FREE    $x             FREE    $x
             */
+#ifdef ZEND_ENGINE_2_4	
+            } else if (p->jmp_2->start->opcode == ZEND_FREE &&
+                       p->jmp_2->start->op1_type == IS_TMP_VAR &&
+                       op->result.var == p->jmp_2->start->op1.var) {
+              op->opcode = ZEND_JMPNZ;
+              op->result_type = IS_UNUSED;
+#else
             } else if (p->jmp_2->start->opcode == ZEND_FREE &&
                        p->jmp_2->start->op1.op_type == IS_TMP_VAR &&
                        op->result.u.var == p->jmp_2->start->op1.u.var) {
               op->opcode = ZEND_JMPNZ;
               op->result.op_type = IS_UNUSED;
+#endif
               if (p->jmp_2 != p->follow) {
                 BB_DEL_PRED(p->jmp_2, p);
                 RM_BB(p->jmp_2);
@@ -1238,10 +1583,17 @@ jmp_nz_ex:
                    ...                    ...
                L1: FREE    $x             FREE    $x
             */
+#ifdef ZEND_ENGINE_2_4	
+            } else if (op->result_type == IS_TMP_VAR &&
+                       p->jmp_2->start->opcode == ZEND_FREE &&
+                       p->jmp_2->start->op1_type == IS_TMP_VAR &&
+                       op->result.var == p->jmp_2->start->op1.var) {
+#else
             } else if (op->result.op_type == IS_TMP_VAR &&
                        p->jmp_2->start->opcode == ZEND_FREE &&
                        p->jmp_2->start->op1.op_type == IS_TMP_VAR &&
                        op->result.u.var == p->jmp_2->start->op1.u.var) {
+#endif
               if (p->jmp_2->len > 1) {
                 /* splitting */
                 BB* new_bb = (p->jmp_2+1);
@@ -1280,7 +1632,11 @@ jmp_nz_ex:
                 BB_ADD_PRED(p->jmp_2->follow, p->jmp_2);
               }
               op->opcode = ZEND_JMPNZ;
+#ifdef ZEND_ENGINE_2_4	
+              op->result_type = IS_UNUSED;
+#else
               op->result.op_type = IS_UNUSED;
+#endif
               if (p->jmp_2 != p->follow) {
                 BB_DEL_PRED(p->jmp_2, p);
                 RM_BB(p->jmp_2);
@@ -1365,10 +1721,17 @@ jmp_2:
               BB_DEL_PRED(p->jmp_1, p);
               RM_BB(p->jmp_1);
               memcpy(op, p->jmp_1->start, sizeof(zend_op));
+#ifdef ZEND_ENGINE_2_4	
+              if (op->op1_type == IS_CONST)
+			  {
+                zval_copy_ctor(op->op1.zv);
+              }
+#else
               if (op->op1.op_type == IS_CONST)
 			  {
                 zval_copy_ctor(&op->op1.u.constant);
               }
+#endif
               p->jmp_1 = NULL;
               ok = 0;
             }
@@ -1513,6 +1876,97 @@ static int opt_result_is_numeric(zend_op* x) {
          grep "proto int" *| awk '{ print $5}'|sed -r 's/^(.+)\((.*)/\1/'|sort -u
          + some function aliases and other frequently used funcs
       */
+#ifdef ZEND_ENGINE_2_4	
+      if (x->op1_type == IS_CONST &&
+          x->op1.zv->type == IS_STRING &&
+          (strcmp(x->op1.zv->value.str.val,"abs") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"array_push") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"array_unshift") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"assert") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"bindec") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"connection_aborted") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"connection_status") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"count") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"dl") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"extract") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"ezmlm_hash") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"file_put_contents") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"fileatime") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"filectime") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"filegroup") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"fileinode") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"filemtime") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"fileowner") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"fileperms") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"filesize") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"fpassthru") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"fprintf") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"fputcsv") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"fseek") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"ftell") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"ftok") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"fwrite") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"get_magic_quotes_gpc") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"get_magic_quotes_runtime") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"getlastmod") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"getmygid") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"getmyinode") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"getmypid") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"getmyuid") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"getprotobyname") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"getrandmax") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"getservbyname") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"hexdec") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"ignore_user_abort") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"intval") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"ip2long") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"levenshtein") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"link") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"linkinfo") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"mail") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"memory_get_peak_usage") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"memory_get_usage") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"mt_getrandmax") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"mt_rand") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"octdec") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"ord") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"pclose") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"printf") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"proc_close") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"rand") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"readfile") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"similar_text") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"strcasecmp") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"strcoll") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"strcmp") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"strcspn") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"stream_select") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"stream_set_write_buffer") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"stream_socket_enable_crypto") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"stream_socket_shutdown") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"stripos") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"strlen") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"strnatcasecmp") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"strnatcmp") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"strncmp") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"strpos") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"strripos") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"strrpos") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"strspn") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"substr_compare") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"substr_count") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"symlink") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"system") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"umask") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"version_compare") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"vfprintf") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"vprintf") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"fputs") == 0 ||		/* func alias of fwrite */
+           strcmp(x->op1.zv->value.str.val,"set_file_buffer") == 0 ||	/* func alias of stream_set_write_buffer */
+           strcmp(x->op1.zv->value.str.val,"sizeof") == 0 ||		/* func alias of count */
+           strcmp(x->op1.zv->value.str.val,"ereg") == 0 ||
+           strcmp(x->op1.zv->value.str.val,"eregi") == 0)) {
+#else
       if (x->op1.op_type == IS_CONST &&
           x->op1.u.constant.type == IS_STRING &&
           (strcmp(x->op1.u.constant.value.str.val,"abs") == 0 ||
@@ -1602,6 +2056,8 @@ static int opt_result_is_numeric(zend_op* x) {
            strcmp(x->op1.u.constant.value.str.val,"sizeof") == 0 ||		/* func alias of count */
            strcmp(x->op1.u.constant.value.str.val,"ereg") == 0 ||
            strcmp(x->op1.u.constant.value.str.val,"eregi") == 0)) {
+#endif
+
         return 1;
       }
       return 0;
@@ -1611,11 +2067,19 @@ static int opt_result_is_numeric(zend_op* x) {
   return 0;
 }
 
+#ifdef ZEND_ENGINE_2_4
+#define FETCH_TYPE(op) ((op)->op2.u.EA.type)
+#define SET_UNDEFINED(op) Ts[VAR_NUM((op).var)] = NULL;
+#define SET_DEFINED(op)   Ts[VAR_NUM((op)->result.var)] = (op);
+#define IS_DEFINED(op)    (Ts[VAR_NUM((op).var)] != NULL)
+#define DEFINED_OP(op)    (Ts[VAR_NUM((op).var)])
+#else
 #define FETCH_TYPE(op) ((op)->op2.u.EA.type)
 #define SET_UNDEFINED(op) Ts[VAR_NUM((op).u.var)] = NULL;
 #define SET_DEFINED(op)   Ts[VAR_NUM((op)->result.u.var)] = (op);
 #define IS_DEFINED(op)    (Ts[VAR_NUM((op).u.var)] != NULL)
 #define DEFINED_OP(op)    (Ts[VAR_NUM((op).u.var)])
+#endif
 
 static void optimize_bb(BB* bb, zend_op_array* op_array, char* global, int pass TSRMLS_DC)
 {
@@ -1639,7 +2103,95 @@ static void optimize_bb(BB* bb, zend_op_array* op_array, char* global, int pass 
 
   while (op < end) {
     /* Constant Folding */
-    if (op->op1.op_type == IS_TMP_VAR &&
+#ifdef ZEND_ENGINE_2_4
+    if (op->op1_type == IS_TMP_VAR &&
+        IS_DEFINED(op->op1) &&
+        DEFINED_OP(op->op1)->opcode == ZEND_QM_ASSIGN &&
+        DEFINED_OP(op->op1)->op1_type == IS_CONST) {
+      zend_op *x = DEFINED_OP(op->op1);
+      if (op->opcode != ZEND_CASE) {
+        SET_UNDEFINED(op->op1);
+        memcpy(&op->op1, &x->op1, sizeof(znode));
+        SET_TO_NOP(x);
+      }
+    }
+    if (op->op2_type == IS_TMP_VAR &&
+        IS_DEFINED(op->op2) &&
+        DEFINED_OP(op->op2)->opcode == ZEND_QM_ASSIGN &&
+        DEFINED_OP(op->op2)->op1_type == IS_CONST) {
+      zend_op *x = DEFINED_OP(op->op2);
+      SET_UNDEFINED(op->op2);
+      memcpy(&op->op2, &x->op1, sizeof(znode));
+      SET_TO_NOP(x);
+    }
+
+    if (op->opcode == ZEND_IS_EQUAL) {
+      if (op->op1_type == IS_CONST &&
+          (op->op1.zv->type == IS_BOOL &&
+           op->op1.zv->value.lval == 0)) {
+        op->opcode = ZEND_BOOL_NOT;
+        memcpy(&op->op1, &op->op2, sizeof(znode));
+        op->op2_type = IS_UNUSED;
+      } else if (op->op1_type == IS_CONST &&
+                 op->op1.zv->type == IS_BOOL &&
+                 op->op1.zv->value.lval == 1) {
+        op->opcode = ZEND_BOOL;
+        memcpy(&op->op1, &op->op2, sizeof(znode));
+        op->op2_type = IS_UNUSED;
+      } else if (op->op2_type == IS_CONST &&
+                 op->op2.zv->type == IS_BOOL &&
+                 op->op2.zv->value.lval == 0) {
+        op->opcode = ZEND_BOOL_NOT;
+        op->op2_type = IS_UNUSED;
+      } else if (op->op2_type == IS_CONST &&
+          op->op2.zv->type == IS_BOOL &&
+          op->op2.zv->value.lval == 1) {
+        op->opcode = ZEND_BOOL;
+        op->op2_type = IS_UNUSED;
+      } else if (op->op2_type == IS_CONST &&
+          op->op2.zv->type == IS_LONG &&
+          op->op2.zv->value.lval == 0 &&
+          (op->op1_type == IS_TMP_VAR || op->op1_type == IS_VAR) &&
+          IS_DEFINED(op->op1) &&
+          opt_result_is_numeric(DEFINED_OP(op->op1))) {
+        op->opcode = ZEND_BOOL_NOT;
+        op->op2_type = IS_UNUSED;
+      }
+    } else if (op->opcode == ZEND_IS_NOT_EQUAL) {
+      if (op->op1_type == IS_CONST &&
+          op->op1.zv->type == IS_BOOL &&
+          op->op1.zv->value.lval == 0) {
+        op->opcode = ZEND_BOOL;
+        memcpy(&op->op1, &op->op2, sizeof(znode));
+        op->op2_type = IS_UNUSED;
+      } else if (op->op1_type == IS_CONST &&
+                 op->op1.zv->type == IS_BOOL &&
+                 op->op1.zv->value.lval == 1) {
+        op->opcode = ZEND_BOOL_NOT;
+        memcpy(&op->op1, &op->op2, sizeof(znode));
+        op->op2_type = IS_UNUSED;
+      } else if (op->op2_type == IS_CONST &&
+                 op->op2.zv->type == IS_BOOL &&
+                 op->op2.zv->value.lval == 0) {
+        op->opcode = ZEND_BOOL;
+        op->op2_type = IS_UNUSED;
+      } else if (op->op2_type == IS_CONST &&
+          op->op2.zv->type == IS_BOOL &&
+          op->op2.zv->value.lval == 1) {
+        op->opcode = ZEND_BOOL_NOT;
+        op->op2_type = IS_UNUSED;
+      } else if (op->op2_type == IS_CONST &&
+          op->op2.zv->type == IS_LONG &&
+          op->op2.zv->value.lval == 0 &&
+          (op->op1_type == IS_TMP_VAR || op->op1_type == IS_VAR) &&
+          IS_DEFINED(op->op1) &&
+          opt_result_is_numeric(DEFINED_OP(op->op1))) {
+        op->opcode = ZEND_BOOL;
+        op->op2_type = IS_UNUSED;
+      }
+    }
+#else
+      if (op->op1.op_type == IS_TMP_VAR &&
         IS_DEFINED(op->op1) &&
         DEFINED_OP(op->op1)->opcode == ZEND_QM_ASSIGN &&
         DEFINED_OP(op->op1)->op1.op_type == IS_CONST) {
@@ -1725,8 +2277,13 @@ static void optimize_bb(BB* bb, zend_op_array* op_array, char* global, int pass 
         op->op2.op_type = IS_UNUSED;
       }
     }
+#endif
 
-    if ((op->opcode == ZEND_ADD ||
+
+#ifdef ZEND_ENGINE_2_4
+#else
+
+	    if ((op->opcode == ZEND_ADD ||
                 op->opcode == ZEND_SUB ||
                 op->opcode == ZEND_MUL ||
                 op->opcode == ZEND_DIV ||
@@ -2553,6 +3110,11 @@ static void optimize_bb(BB* bb, zend_op_array* op_array, char* global, int pass 
         SET_DEFINED(op);
       }
     }
+
+
+#endif
+
+
     ++op;
   }
 
@@ -2639,6 +3201,34 @@ static int build_cfg(zend_op_array *op_array, BB* bb)
 			}
 			else
 #endif
+#ifdef ZEND_ENGINE_2_4	
+			if ((dsc->ops & OP1_MASK) == OP1_UNUSED)
+			{
+				op->op1_type = IS_UNUSED;
+			}
+			if ((dsc->ops & OP2_MASK) == OP2_CLASS)
+			{
+				op->op2_type = IS_VAR;
+			}
+			else if ((dsc->ops & OP2_MASK) == OP2_UNUSED)
+			{
+				op->op2_type = IS_UNUSED;
+			}
+			else if ((dsc->ops & OP2_MASK) == OP2_FETCH /* &&
+					op->op2.u.EA.type == ZEND_FETCH_STATIC_MEMBER */)
+			{
+				op->op2_type = IS_VAR;
+			}
+			if ((dsc->ops & RES_MASK) == RES_CLASS)
+			{
+				op->result_type = IS_VAR;
+				//op->result.u.EA.type &= ~EXT_TYPE_UNUSED;
+			}
+			else if ((dsc->ops & RES_MASK) == RES_UNUSED)
+			{
+				op->result_type = IS_UNUSED;
+			}
+#else
 			if ((dsc->ops & OP1_MASK) == OP1_UNUSED)
 			{
 				op->op1.op_type = IS_UNUSED;
@@ -2665,6 +3255,8 @@ static int build_cfg(zend_op_array *op_array, BB* bb)
 			{
 				op->result.op_type = IS_UNUSED;
 			}
+#endif
+
 		}
 		switch(op->opcode)
 		{
@@ -2676,12 +3268,21 @@ static int build_cfg(zend_op_array *op_array, BB* bb)
 			case ZEND_GOTO:
 #endif
 			case ZEND_JMP:
+#ifdef ZEND_ENGINE_2_4	
+				bb[op->op1.opline_num].start = &op_array->opcodes[op->op1.opline_num];
+				bb[line_num+1].start = op+1;
+#else
 				bb[op->op1.u.opline_num].start = &op_array->opcodes[op->op1.u.opline_num];
 				bb[line_num+1].start = op+1;
+#endif
 				break;
 			case ZEND_JMPZNZ:
 				bb[op->extended_value].start = &op_array->opcodes[op->extended_value];
+#ifdef ZEND_ENGINE_2_4	
+				bb[op->op2.opline_num].start = &op_array->opcodes[op->op2.opline_num];
+#else
 				bb[op->op2.u.opline_num].start = &op_array->opcodes[op->op2.u.opline_num];
+#endif
 				bb[line_num+1].start = op+1;
 				break;
 			case ZEND_JMPZ:
@@ -2695,10 +3296,47 @@ static int build_cfg(zend_op_array *op_array, BB* bb)
 			case ZEND_FE_RESET:
 			case ZEND_FE_FETCH:
 				bb[line_num+1].start = op+1;
+#ifdef ZEND_ENGINE_2_4	
+				bb[op->op2.opline_num].start = &op_array->opcodes[op->op2.opline_num];
+#else
 				bb[op->op2.u.opline_num].start = &op_array->opcodes[op->op2.u.opline_num];
+#endif
 				break;
 			case ZEND_BRK:
 				/* Replace BRK by JMP */
+#ifdef ZEND_ENGINE_2_4	
+				if (op->op1.opline_num == -1)
+				{
+				}
+				else if (op->op2_type == IS_CONST &&
+						op->op2.zv->type == IS_LONG)
+				{
+					int level  = op->op2.zv->value.lval;
+					zend_uint offset = op->op1.opline_num;
+					zend_brk_cont_element *jmp_to;
+					do
+					{
+						if (offset < 0 || offset >= op_array->last_brk_cont)
+						{
+							goto brk_failed;
+						}
+						jmp_to = &op_array->brk_cont_array[offset];
+						if (level>1 &&
+							(op_array->opcodes[jmp_to->brk].opcode == ZEND_SWITCH_FREE ||
+							op_array->opcodes[jmp_to->brk].opcode == ZEND_FREE))
+						{
+							goto brk_failed;
+						}
+						offset = jmp_to->parent;
+					}
+					while (--level > 0);
+					op->opcode = ZEND_JMP;
+					op->op1.opline_num = jmp_to->brk;
+					op->op2_type = IS_UNUSED;
+					op->extended_value = ZEND_BRK; /* Mark the opcode as former ZEND_BRK */
+					bb[op->op1.opline_num].start = &op_array->opcodes[jmp_to->brk];
+				}
+#else
 				if (op->op1.u.opline_num == -1)
 				{
 				}
@@ -2730,6 +3368,7 @@ static int build_cfg(zend_op_array *op_array, BB* bb)
 					op->extended_value = ZEND_BRK; /* Mark the opcode as former ZEND_BRK */
 					bb[op->op1.u.opline_num].start = &op_array->opcodes[jmp_to->brk];
 				}
+#endif
 				else
 				{
 brk_failed:
@@ -2738,6 +3377,40 @@ brk_failed:
 				bb[line_num+1].start = op+1;
 				break;
 			case ZEND_CONT:
+#ifdef ZEND_ENGINE_2_4	
+				/* Replace CONT by JMP */
+				if (op->op1.opline_num == -1)
+				{
+				}
+				else if (op->op2_type == IS_CONST &&
+						op->op2.zv->type == IS_LONG)
+				{
+				int level  = op->op2.zv->value.lval;
+				zend_uint offset = op->op1.opline_num;
+				zend_brk_cont_element *jmp_to;
+				do
+				{
+					if (offset < 0 || offset >= op_array->last_brk_cont)
+					{
+						goto cont_failed;
+					}
+					jmp_to = &op_array->brk_cont_array[offset];
+					if (level>1 &&
+						(op_array->opcodes[jmp_to->brk].opcode == ZEND_SWITCH_FREE ||
+						op_array->opcodes[jmp_to->brk].opcode == ZEND_FREE))
+					{
+						goto cont_failed;
+					}
+					offset = jmp_to->parent;
+				}
+				while (--level > 0);
+				op->opcode = ZEND_JMP;
+				op->op1.opline_num = jmp_to->cont;
+				op->op2_type = IS_UNUSED;
+				op->extended_value = ZEND_CONT; /* Mark the opcode as former ZEND_CONT */
+				bb[op->op1.opline_num].start = &op_array->opcodes[jmp_to->cont];
+				}
+#else
 				/* Replace CONT by JMP */
 				if (op->op1.u.opline_num == -1)
 				{
@@ -2770,6 +3443,7 @@ brk_failed:
 				op->extended_value = ZEND_CONT; /* Mark the opcode as former ZEND_CONT */
 				bb[op->op1.u.opline_num].start = &op_array->opcodes[jmp_to->cont];
 				}
+#endif
 				else
 				{
 cont_failed:
@@ -2782,10 +3456,17 @@ cont_failed:
 				bb[line_num+1].start = op+1;
 				break;
 			case ZEND_THROW:
+#ifdef ZEND_ENGINE_2_4	
+				if (op->op2.opline_num != -1)
+				{
+					bb[op->op2.opline_num].start = &op_array->opcodes[op->op2.opline_num];
+				}
+#else
 				if (op->op2.u.opline_num != -1)
 				{
 					bb[op->op2.u.opline_num].start = &op_array->opcodes[op->op2.u.opline_num];
 				}
+#endif
 				bb[line_num+1].start = op+1;
 				break;
 			case ZEND_DO_FCALL:
@@ -2794,10 +3475,18 @@ cont_failed:
 				break;
 			case ZEND_UNSET_VAR:
 			case ZEND_UNSET_DIM:
+#ifdef ZEND_ENGINE_2_4	
+				op->result_type = IS_UNUSED;
+#else
 				op->result.op_type = IS_UNUSED;
+#endif
 				break;
 			case ZEND_UNSET_OBJ:
+#ifdef ZEND_ENGINE_2_4	
+				op->result_type = IS_UNUSED;
+#else
 				op->result.op_type = IS_UNUSED;
+#endif
 				break;
 			default:
 				break;
@@ -2835,7 +3524,11 @@ cont_failed:
 			switch (op->opcode)
 			{
 				case ZEND_JMP:
+#ifdef ZEND_ENGINE_2_4	
+				    p->jmp_1 = &bb[op->op1.opline_num];
+#else
 				    p->jmp_1 = &bb[op->op1.u.opline_num];
+#endif
 #  if (PHP_MAJOR_VERSION == 5 && PHP_MINOR_VERSION >= 2 && PHP_RELEASE_VERSION >= 1) || PHP_MAJOR_VERSION >= 6
 					/* php >= 5.2.1 introduces a ZEND_JMP before a ZEND_FETCH_CLASS and ZEND_CATCH
 					   this leaves those blocks intact */
@@ -2845,7 +3538,11 @@ cont_failed:
 #  endif
 					break;
 				case ZEND_JMPZNZ:
+#ifdef ZEND_ENGINE_2_4	
+					p->jmp_2 = &bb[op->op2.opline_num];
+#else
 					p->jmp_2 = &bb[op->op2.u.opline_num];
+#endif
 					p->jmp_ext = &bb[op->extended_value];
 					break;
 				case ZEND_JMPZ:
@@ -2858,12 +3555,20 @@ cont_failed:
 #ifdef ZEND_JMP_SET
 				case ZEND_JMP_SET:
 #endif
+#ifdef ZEND_ENGINE_2_4	
+					p->jmp_2 = &bb[op->op2.opline_num];
+#else
 					p->jmp_2 = &bb[op->op2.u.opline_num];
+#endif
 					p->follow = &bb[line_num];
 					break;
 #ifdef ZEND_GOTO
 				case ZEND_GOTO:
+#ifdef ZEND_ENGINE_2_4	
+					p->jmp_1 = &bb[op->op1.opline_num];
+#else
 					p->jmp_1 = &bb[op->op1.u.opline_num];
+#endif
 					p->follow = &bb[line_num];
 					break;
 #endif
@@ -2889,10 +3594,17 @@ cont_failed:
 					p->follow = &bb[line_num];
 					break;
 				case ZEND_THROW:
+#ifdef ZEND_ENGINE_2_4	
+					if (op->op2.opline_num != -1)
+					{
+						p->jmp_2 = &bb[op->op2.opline_num];
+					}
+#else
 					if (op->op2.u.opline_num != -1)
 					{
 						p->jmp_2 = &bb[op->op2.u.opline_num];
 					}
+#endif
 					p->follow = &bb[line_num];
 					break;
 				default:
@@ -2941,7 +3653,11 @@ static void emit_cfg(zend_op_array *op_array, BB* bb)
     p = p->next;
   }
   op_array->last = op - start;
-  op_array->start_op = NULL;
+#ifdef ZEND_ENGINE_2_4	
+	// op_array->start_op = NULL;
+#else
+	op_array->start_op = NULL;
+#endif
   while (op < end)
   {
     SET_TO_NOP(op);
@@ -2953,6 +3669,16 @@ static void emit_cfg(zend_op_array *op_array, BB* bb)
   while (p != NULL) {
     if (p->used && p->len > 0)
 	{
+#ifdef ZEND_ENGINE_2_4	
+      if (p->jmp_1 != NULL)
+	  {
+        p->start[p->len-1].op1.opline_num = p->jmp_1->start - start;
+      }
+      if (p->jmp_2 != NULL)
+	  {
+        p->start[p->len-1].op2.opline_num = p->jmp_2->start - start;
+      }
+#else
       if (p->jmp_1 != NULL)
 	  {
         p->start[p->len-1].op1.u.opline_num = p->jmp_1->start - start;
@@ -2961,6 +3687,7 @@ static void emit_cfg(zend_op_array *op_array, BB* bb)
 	  {
         p->start[p->len-1].op2.u.opline_num = p->jmp_2->start - start;
       }
+#endif
       if (p->jmp_ext != NULL)
 	  {
         p->start[p->len-1].extended_value = p->jmp_ext->start - start;
@@ -3080,7 +3807,82 @@ void reassign_registers(zend_op_array *op_array, BB* p, char *global) {
       while (start < op) {
         --op;
         op_data = NULL;
-        if (op->opcode == ZEND_DO_FCALL_BY_NAME &&
+#ifdef ZEND_ENGINE_2_4	
+      if (op->opcode == ZEND_DO_FCALL_BY_NAME &&
+            op->op1_type == IS_CONST) {
+          zval_dtor(&op->op1.zv);
+          op->op1_type = IS_UNUSED;
+        }
+        if (op->op1_type == IS_VAR || op->op1_type == IS_TMP_VAR) {
+          int r = VAR_NUM(op->op1.var);
+          GET_REG(r);
+          if (op->opcode == ZEND_DO_FCALL_BY_NAME) {
+            op->op1_type = IS_UNUSED;
+          } else if (op->opcode == ZEND_FETCH_CONSTANT && op->op1_type == IS_VAR) {
+            op->op1.var = VAR_VAL(assigned[r]);
+#ifndef ZEND_ENGINE_2_3
+            /* restore op1 type from VAR to CONST (the opcode handler expects this or bombs out with invalid opcode)
+               FETCH_CONSTANT when fetching class constant screws up because of this with >=php-5.3 */
+            op->op1_type = IS_CONST;
+#endif
+          } else {
+            op->op1.var = VAR_VAL(assigned[r]);
+          }
+        }
+        if (op->op2_type == IS_VAR || op->op2_type == IS_TMP_VAR) {
+          int r = VAR_NUM(op->op2.var);
+          GET_REG(r);
+          op->op2.var = VAR_VAL(assigned[r]);
+        }
+#ifdef ZEND_ENGINE_2_3
+        if (op->opcode == ZEND_DECLARE_INHERITED_CLASS_DELAYED) {
+          int r = VAR_NUM(op->extended_value);
+          GET_REG(r);
+          op->extended_value = VAR_VAL(assigned[r]);
+
+          opline_num = op - op_array->opcodes;
+          /* store the very first occurence of ZEND_DECLARE_INHERITED_CLASS_DELAYED
+             we need this to restore op_array->early_binding later on */
+          if (first_class_delayed == -1)
+            first_class_delayed = opline_num;
+          if (last_class_delayed_in_this_bb == -1) {
+            last_class_delayed_in_this_bb = opline_num;
+          }
+
+          if (prev_class_delayed != -1) {
+            /* link current ZEND_DECLARE_INHERITED_CLASS_DELAYED to previous one */
+            op->result.opline_num = prev_class_delayed;
+          }
+          /* There might be another ZEND_DECLARE_INHERITED_CLASS_DELAYED down the road
+             (or actually up the road since were traversing the oparray backwards).
+             store current opline */
+          prev_class_delayed = opline_num;
+        }
+#endif
+        if (op->opcode == ZEND_DECLARE_INHERITED_CLASS) {
+
+          int r = VAR_NUM(op->extended_value);
+          GET_REG(r);
+          op->extended_value = VAR_VAL(assigned[r]);
+        }
+        if (op->result_type == IS_VAR ||
+            op->result_type == IS_TMP_VAR) {
+          int r = VAR_NUM(op->result.var);
+          GET_REG(r);
+          op->result.var = VAR_VAL(assigned[r]);
+          if (
+              (op->opcode != ZEND_RECV && op->opcode != ZEND_RECV_INIT/* &&
+              (op->result.u.EA.type & EXT_TYPE_UNUSED) != 0*/) ||
+              (!(op->op1_type == op->result_type && op->op1.var == op->result.var) &&
+              !(op->op2_type == op->result_type && op->op2.var == op->result.var) &&
+              !global[r] && op->opcode != ZEND_ADD_ARRAY_ELEMENT )
+             ) {
+                FREE_REG(VAR_NUM(op->result.var));
+          }
+        }
+      
+#else
+			if (op->opcode == ZEND_DO_FCALL_BY_NAME &&
             op->op1.op_type == IS_CONST) {
           zval_dtor(&op->op1.u.constant);
           op->op1.op_type = IS_UNUSED;
@@ -3152,11 +3954,17 @@ void reassign_registers(zend_op_array *op_array, BB* p, char *global) {
                 FREE_REG(VAR_NUM(op->result.u.var));
           }
         }
-      }
+      
+#endif
+        }
     }
 #ifdef ZEND_ENGINE_2_3
     if (last_class_delayed_in_prev_bb != -1 && last_class_delayed_in_this_bb != -1) {
+#ifdef ZEND_ENGINE_2_4	
+      op_array->opcodes[last_class_delayed_in_prev_bb].result.opline_num = prev_class_delayed;
+#else
       op_array->opcodes[last_class_delayed_in_prev_bb].result.u.opline_num = prev_class_delayed;
+#endif
       last_class_delayed_in_prev_bb = -1;
     }
     if (last_class_delayed_in_this_bb != -1) {
@@ -3191,9 +3999,15 @@ void restore_operand_types(zend_op_array *op_array) {
 
 	for (line_num=0; line_num < len; op++,line_num++)
 	{
+#ifdef ZEND_ENGINE_2_4	
+          if (op->opcode == ZEND_FETCH_CONSTANT && op->op1_type == IS_VAR) {
+            /* restore op1 type from VAR to CONST (the opcode handler expects this or bombs out with invalid opcode) */
+            op->op1_type = IS_CONST;
+#else
           if (op->opcode == ZEND_FETCH_CONSTANT && op->op1.op_type == IS_VAR) {
             /* restore op1 type from VAR to CONST (the opcode handler expects this or bombs out with invalid opcode) */
             op->op1.op_type = IS_CONST;
+#endif
 	  }
 	}
 }
@@ -3212,14 +4026,22 @@ void restore_opline_num(zend_op_array *op_array)
         switch (opline->opcode){
             case ZEND_GOTO:
             case ZEND_JMP:
+#ifdef ZEND_ENGINE_2_4	
+                opline->op1.opline_num = opline->op1.jmp_addr - op_array->opcodes;
+#else
                 opline->op1.u.opline_num = opline->op1.u.jmp_addr - op_array->opcodes;
+#endif
                 break;
             case ZEND_JMPZ:
             case ZEND_JMPNZ:
             case ZEND_JMPZ_EX:
             case ZEND_JMPNZ_EX:
             case ZEND_JMP_SET:
+#ifdef ZEND_ENGINE_2_4	
+                opline->op2.opline_num = opline->op2.jmp_addr - op_array->opcodes;
+#else
                 opline->op2.u.opline_num = opline->op2.u.jmp_addr - op_array->opcodes;
+#endif
                 break;
         }
         opline++;

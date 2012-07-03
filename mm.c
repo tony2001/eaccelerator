@@ -66,7 +66,7 @@
 #  endif
 #endif
 
-#undef MM_CHECK 
+#define MM_CHECK
 #define MM_PATTERN  0xdeadbeef
 
 #if defined(MM_SHM_MMAP_FILE) || defined(MM_SHM_MMAP_ZERO) || defined(MM_SHM_MMAP_ANON) || defined(MM_SHM_MMAP_POSIX) || defined(HAVE_MPROTECT)
@@ -206,7 +206,7 @@ typedef struct mm_mutex {
 #define spinlock_try_lock(rw)  asm volatile("lock ; decl %0" :"=m" ((rw)->lock) : : "memory")
 #define _spinlock_unlock(rw)   asm volatile("lock ; incl %0" :"=m" ((rw)->lock) : : "memory")
 
-static int mm_init_lock(const char* key, mm_mutex* lock) 
+static int mm_init_lock(const char* key, mm_mutex* lock)
 {
     lock->lock = 0x1;
     lock->pid = -1;
@@ -214,7 +214,7 @@ static int mm_init_lock(const char* key, mm_mutex* lock)
     return 1;
 }
 
-static int mm_do_lock(mm_mutex* lock, int kind) 
+static int mm_do_lock(mm_mutex* lock, int kind)
 {
     while (1) {
         spinlock_try_lock(lock);
@@ -259,7 +259,7 @@ static int mm_init_lock(const char* key, mm_mutex* lock) {
   }
 
 #ifdef __USE_UNIX98
-  /* PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP allows to avoid writer starvation 
+  /* PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP allows to avoid writer starvation
    as long as any read locking is not done in a recursive fashion */
 
   pthread_rwlockattr_setkind_np(&attr, PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP);
@@ -430,7 +430,7 @@ static int mm_init_lock(const char* key, mm_mutex* lock) {
   do {
     rc = semctl(lock->semid, 0, IPC_SET, arg);
   } while (rc < 0 && errno == EINTR);
-  
+
   arg.val = 1;
   do {
     rc = semctl(lock->semid, 0, SETVAL, arg);
@@ -805,8 +805,8 @@ static MM* mm_create_shm(const char* key, size_t size) {
             "Lower the amount of memory request or increase the limit in /proc/sys/kernel/shmmax.\n", size, seg_size);
 #endif
 
-    /* bart: Removed the code that tried to allocate more then one segment 
-     * because it didn't work, this part needs a redesign of the mm code to 
+    /* bart: Removed the code that tried to allocate more then one segment
+     * because it didn't work, this part needs a redesign of the mm code to
      * allow this. It should allocate one to init the shared memory and add
      * the other to the free list.
      */
@@ -1134,7 +1134,7 @@ void* mm_malloc_nolock(MM* mm, size_t size) {
   if (size > 0) {
     mm_mem_head* x = NULL;
     size_t realsize = (size_t)MM_ALIGN(MM_SIZE(size));
-#if MM_CHECK
+#ifdef MM_CHECK
     realsize += (size_t)MM_ALIGN(sizeof(int));
 #endif
     if (realsize <= mm->available) {

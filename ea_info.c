@@ -54,12 +54,12 @@ static int isAdminAllowed(TSRMLS_D) {
         p = path;
 
         while (p && *p) {
-            next = strchr(p, DEFAULT_DIR_SEPARATOR); 
+            next = strchr(p, DEFAULT_DIR_SEPARATOR);
             if (next != NULL) {
                 *next = '\0';
                 ++next;
             }
-            
+
             if (!php_check_specific_open_basedir(p, filename TSRMLS_CC)) {
                 efree(path);
                 return 1;
@@ -96,10 +96,10 @@ PHP_FUNCTION(eaccelerator_clean)
 /* }}} */
 
 /* {{{ PHP_FUNCTION(eaccelerator_check_mtime): enable or disable check_mtime */
-PHP_FUNCTION(eaccelerator_check_mtime) 
+PHP_FUNCTION(eaccelerator_check_mtime)
 {
     zend_bool enable;
-    
+
 	if (ea_mm_instance == NULL) {
 		RETURN_NULL();
 	}
@@ -118,17 +118,17 @@ PHP_FUNCTION(eaccelerator_check_mtime)
     } else {
         zend_error(E_WARNING, NOT_ADMIN_WARNING);
     }
-    
+
     RETURN_NULL();
 }
 /* }}} */
 
 /* {{{ PHP_FUNCTION(eaccelerator_optimizer): enable or disable optimizer */
 #ifdef WITH_EACCELERATOR_OPTIMIZER
-PHP_FUNCTION(eaccelerator_optimizer) 
+PHP_FUNCTION(eaccelerator_optimizer)
 {
     zend_bool enable;
-    
+
 	if (ea_mm_instance == NULL) {
 		RETURN_NULL();
 	}
@@ -147,14 +147,14 @@ PHP_FUNCTION(eaccelerator_optimizer)
     } else {
         zend_error(E_WARNING, NOT_ADMIN_WARNING);
     }
-    
+
     RETURN_NULL();
 }
 #endif
 /* }}} */
 
 /* {{{ PHP_FUNCTION(eaccelerator_caching): enable or disable caching */
-PHP_FUNCTION(eaccelerator_caching) 
+PHP_FUNCTION(eaccelerator_caching)
 {
     zend_bool enable;
 
@@ -176,7 +176,7 @@ PHP_FUNCTION(eaccelerator_caching)
     } else {
         zend_error(E_WARNING, NOT_ADMIN_WARNING);
     }
-    
+
     RETURN_NULL();
 }
 /* }}} */
@@ -269,7 +269,7 @@ PHP_FUNCTION (eaccelerator_info)
 
 	// init return table
 	array_init(return_value);
-	
+
 	// put eaccelerator information
 	add_assoc_string(return_value, "version", EACCELERATOR_VERSION, 1);
 	add_assoc_string(return_value, "shm_type", shm, 1);
@@ -311,7 +311,7 @@ PHP_FUNCTION(eaccelerator_cached_scripts)
     }
 
     array_init(return_value);
-    
+
     for (i = 0; i < EA_HASH_SIZE; i++) {
         p = ea_mm_instance->hash[i];
         while (p != NULL) {
@@ -326,7 +326,7 @@ PHP_FUNCTION(eaccelerator_cached_scripts)
             add_assoc_long(script, "reloads", p->nreloads);
             add_assoc_long(script, "usecount", p->use_cnt);
             add_assoc_long(script, "hits", p->nhits);
-            add_next_index_zval(return_value, script); 
+            add_next_index_zval(return_value, script);
             p = p->next;
         }
     }
@@ -361,7 +361,7 @@ PHP_FUNCTION(eaccelerator_removed_scripts)
         add_assoc_long(script, "reloads", p->nreloads);
         add_assoc_long(script, "usecount", p->use_cnt);
         add_assoc_long(script, "hits", p->nhits);
-        add_next_index_zval(return_value, script); 
+        add_next_index_zval(return_value, script);
         p = p->next;
     }
     return;

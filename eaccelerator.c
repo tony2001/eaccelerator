@@ -1537,8 +1537,8 @@ PHP_MINIT_FUNCTION(eaccelerator) {
   ea_debug_init(TSRMLS_C);
 
   if (type == MODULE_PERSISTENT &&
-      strcmp(sapi_module.name, "cgi") != 0 &&
-      strcmp(sapi_module.name, "cli") != 0) {
+      strcmp(sapi_module.name, "cgi") != 0 /*&&
+      strcmp(sapi_module.name, "cli") != 0*/) {
     DBG(ea_debug_put, (EA_DEBUG, "\n=======================================\n"));
     DBG(ea_debug_printf, (EA_DEBUG, "[%d] EACCELERATOR STARTED\n", getpid()));
     DBG(ea_debug_put, (EA_DEBUG, "=======================================\n"));
@@ -1742,6 +1742,7 @@ function_entry eaccelerator_functions[] = {
   PHP_FE(eaccelerator_removed_scripts, NULL)
   PHP_FE(eaccelerator_check_mtime, NULL)
   PHP_FE(eaccelerator_put, NULL)
+  PHP_FE(eaccelerator_add, NULL)
   PHP_FE(eaccelerator_get, NULL)
   PHP_FE(eaccelerator_rm, NULL)
   PHP_FE(eaccelerator_gc, NULL)

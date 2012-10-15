@@ -37,6 +37,7 @@ PHP_FUNCTION(eaccelerator_purge);
 PHP_FUNCTION(eaccelerator_cached_scripts);
 PHP_FUNCTION(eaccelerator_removed_scripts);
 PHP_FUNCTION(eaccelerator_put);
+PHP_FUNCTION(eaccelerator_add);
 PHP_FUNCTION(eaccelerator_get);
 PHP_FUNCTION(eaccelerator_rm);
 PHP_FUNCTION(eaccelerator_gc);

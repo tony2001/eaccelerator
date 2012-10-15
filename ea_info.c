@@ -28,6 +28,7 @@
 #include "eaccelerator.h"
 #include "eaccelerator_version.h"
 #include "ea_info.h"
+#include "ea_cache.h"
 #include "mm.h"
 #include "zend.h"
 #include "fopen_wrappers.h"
@@ -347,6 +348,24 @@ PHP_FUNCTION(eaccelerator_put) /* {{{ */
 	}
 
 	if (eaccelerator_put (key, key_len, val, ttl TSRMLS_CC)) {
+		RETURN_TRUE;
+	}
+	RETURN_FALSE;
+}
+/* }}} */
+
+PHP_FUNCTION(eaccelerator_add) /* {{{ */
+{
+	char *key;
+	int key_len;
+	zval *val;
+	time_t ttl = 0;
+
+	if (zend_parse_parameters (ZEND_NUM_ARGS() TSRMLS_CC, "sz|l", &key, &key_len, &val, &ttl) == FAILURE) {
+		return;
+	}
+
+	if (eaccelerator_add (key, key_len, val, ttl TSRMLS_CC)) {
 		RETURN_TRUE;
 	}
 	RETURN_FALSE;

@@ -36,7 +36,8 @@
 
 int eaccelerator_put (const char *key, int key_len, zval * val, time_t ttl TSRMLS_DC);
 int eaccelerator_add (const char *key, int key_len, zval * val, time_t ttl TSRMLS_DC);
-int eaccelerator_get (const char *key, int key_len, zval * return_value TSRMLS_DC);
+int eaccelerator_cas (unsigned long cas, const char *key, int key_len, zval * val, time_t ttl TSRMLS_DC);
+int eaccelerator_get (const char *key, int key_len, zval * return_value, unsigned long *cas TSRMLS_DC);
 int eaccelerator_rm (const char *key, int key_len TSRMLS_DC);
 size_t eaccelerator_gc (TSRMLS_D);
 

@@ -232,6 +232,7 @@
 #   define EA_ZV_TYPE_P(zv) (Z_TYPE_P(zv) & ~IS_CONSTANT_INDEX)
 #endif
 
+#define GET_NEW_CAS(instance) ++(instance)->cas
 
 #ifndef offsetof
 #  define offsetof(str,fld) ((size_t)&(((str*)NULL)->fld))
@@ -363,6 +364,7 @@ typedef struct _ea_user_cache_entry {
 	struct _ea_user_cache_entry *next;
 	unsigned int hv;			/* hash value                  */
 	long ttl;					/* expiration time             */
+	unsigned long cas;			/* cas value for the entry */
 	long create;
 	int size;
 	zval value;					/* value                       */
@@ -383,6 +385,7 @@ typedef struct {
 	ea_cache_entry *removed;
 	ea_cache_entry *hash[EA_HASH_SIZE];
 	ea_user_cache_entry *user_hash[EA_USER_HASH_SIZE];
+	unsigned long cas;
 } eaccelerator_mm;
 
 typedef union align_union {

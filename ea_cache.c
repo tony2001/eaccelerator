@@ -122,6 +122,7 @@ int eaccelerator_put(const char *key, int key_len, zval * val, time_t ttl TSRMLS
 		EACCELERATOR_LOCK_RW();
 		ea_mm_instance->user_hash_cnt++;
 		q->next = ea_mm_instance->user_hash[slot];
+		q->cas = GET_NEW_CAS(ea_mm_instance);
 		ea_mm_instance->user_hash[slot] = q;
 		p = q->next;
 		while (p != NULL) {
@@ -224,6 +225,110 @@ int eaccelerator_add(const char *key, int key_len, zval * val, time_t ttl TSRMLS
 
 		ea_mm_instance->user_hash_cnt++;
 		q->next = ea_mm_instance->user_hash[slot];
+		q->cas = GET_NEW_CAS(ea_mm_instance);
+		ea_mm_instance->user_hash[slot] = q;
+		p = q->next;
+		while (p != NULL) {
+			if ((p->hv == hv) && (strcmp(p->key, xkey) == 0)) {
+				ea_mm_instance->user_hash_cnt--;
+				q->next = p->next;
+				eaccelerator_free_nolock(p);
+				break;
+			}
+			q = p;
+			p = p->next;
+		}
+		ret = 1;
+	}
+	EACCELERATOR_UNLOCK_RW();
+	EACCELERATOR_PROTECT();
+
+	if (xlen != key_len) {
+		efree(xkey);
+	}
+	return ret;
+}
+/* }}} */
+
+/* compare-and-swap a key in the cache (fail if it's been changed by somebody else) */
+int eaccelerator_cas(unsigned long cas, const char *key, int key_len, zval * val, time_t ttl TSRMLS_DC) /* {{{ */
+{
+	ea_user_cache_entry *p, *q, *x = NULL;
+	unsigned int slot, hv;
+	long size;
+	int ret = 0;
+	int xlen;
+	char *xkey;
+
+	if (ea_mm_instance == NULL) {
+		return 0;
+	}
+
+	xkey = build_key(key, key_len, &xlen TSRMLS_CC);
+	hv = zend_get_hash_value(xkey, xlen + 1);
+	slot = hv & EA_USER_HASH_MAX;
+
+	EACCELERATOR_UNPROTECT();
+	EACCELERATOR_LOCK_RW();
+
+	q = NULL;
+	p = ea_mm_instance->user_hash[slot];
+	while (p != NULL) {
+		if ((p->hv == hv) && (strcmp(p->key, xkey) == 0)) {
+			x = p;
+			break;
+		}
+		q = p;
+		p = p->next;
+	}
+
+	/* if such item doesn't exist or has a different CAS */
+	if (!x || (cas != 0 && x->cas != cas)) {
+		EACCELERATOR_UNLOCK_RW();
+		EACCELERATOR_PROTECT();
+		if (xlen != key_len) {
+			efree(xkey);
+		}
+		return 0;
+	}
+
+	EAG(mem) = NULL;
+	zend_hash_init(&EAG(strings), 0, NULL, NULL, 0);
+	EACCELERATOR_ALIGN(EAG(mem));
+	EAG(mem) += offsetof(ea_user_cache_entry, key) + xlen + 1;
+	EAG(mem) += calc_zval(val TSRMLS_CC);
+	zend_hash_destroy(&EAG(strings));
+
+	size = (long) EAG(mem);
+
+	EAG(mem) = NULL;
+	EAG(mem) = eaccelerator_malloc_nolock(size);
+	if (EAG(mem)) {
+		memset(EAG(mem), 0, size);
+		zend_hash_init(&EAG(strings), 0, NULL, NULL, 0);
+		EACCELERATOR_ALIGN(EAG(mem));
+		q = (ea_user_cache_entry *) EAG(mem);
+		q->size = size;
+		EAG(mem) += offsetof(ea_user_cache_entry, key) + xlen + 1;
+		q->hv = zend_get_hash_value(xkey, xlen + 1);
+		memcpy(q->key, xkey, xlen + 1);
+		memcpy(&q->value, val, sizeof(zval));
+		q->ttl = ttl ? time(0) + ttl : 0;
+		q->create = time(0);
+		/* set the refcount to 1 */
+		Z_SET_REFCOUNT_P(&q->value, 1);
+		store_zval(&EAG(mem), &q->value TSRMLS_CC);
+		zend_hash_destroy(&EAG(strings));
+
+		/*
+		 * storing to shared memory
+		 */
+		slot = q->hv & EA_USER_HASH_MAX;
+		hv = q->hv;
+
+		ea_mm_instance->user_hash_cnt++;
+		q->next = ea_mm_instance->user_hash[slot];
+		q->cas = GET_NEW_CAS(ea_mm_instance);
 		ea_mm_instance->user_hash[slot] = q;
 		p = q->next;
 		while (p != NULL) {
@@ -249,7 +354,7 @@ int eaccelerator_add(const char *key, int key_len, zval * val, time_t ttl TSRMLS
 /* }}} */
 
 /* get a key from the cache */
-int eaccelerator_get(const char *key, int key_len, zval * return_value TSRMLS_DC) /* {{{ */
+int eaccelerator_get(const char *key, int key_len, zval * return_value, unsigned long *cas TSRMLS_DC) /* {{{ */
 {
     unsigned int hv, slot;
     int xlen;
@@ -278,16 +383,19 @@ int eaccelerator_get(const char *key, int key_len, zval * return_value TSRMLS_DC
 		}
 		p = p->next;
 	}
-	EACCELERATOR_UNLOCK_RD();
-	EACCELERATOR_PROTECT();
 	if (x) {
 		memcpy(return_value, &x->value, sizeof(zval));
 		restore_zval(return_value TSRMLS_CC);
 		if (xlen != key_len) {
 			efree(xkey);
 		}
+		*cas = x->cas;
+		EACCELERATOR_UNLOCK_RD();
+		EACCELERATOR_PROTECT();
 		return 1;
 	}
+	EACCELERATOR_UNLOCK_RD();
+	EACCELERATOR_PROTECT();
     return 0;
 }
 /* }}} */

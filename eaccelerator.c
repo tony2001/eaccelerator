@@ -42,6 +42,7 @@
 #include "ea_info.h"
 #include "ea_dasm.h"
 #include "ea_atomic.h"
+#include "ea_cache.h"
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -276,6 +277,7 @@ static int init_mm(TSRMLS_D) {
   ea_mm_instance->removed = NULL;
   ea_mm_instance->last_prune = time(NULL);	/* this time() call is harmless since this is init phase */
   ea_mm_instance->start_time = time(NULL);
+  ea_mm_instance->cas = 0;
   EACCELERATOR_PROTECT();
   return SUCCESS;
 }
@@ -1732,6 +1734,11 @@ ZEND_BEGIN_ARG_INFO(eaccelerator_second_arg_force_ref, 0)
   ZEND_ARG_PASS_INFO(1)
 ZEND_END_ARG_INFO();
 
+ZEND_BEGIN_ARG_INFO_EX(arginfo_eaccelerator_get, 0, 0, 1)
+  ZEND_ARG_INFO(0, key)
+  ZEND_ARG_INFO(1, cas)
+ZEND_END_ARG_INFO()
+
 function_entry eaccelerator_functions[] = {
   PHP_FE(eaccelerator_caching, NULL)
   PHP_FE(eaccelerator_clear, NULL)
@@ -1743,7 +1750,8 @@ function_entry eaccelerator_functions[] = {
   PHP_FE(eaccelerator_check_mtime, NULL)
   PHP_FE(eaccelerator_put, NULL)
   PHP_FE(eaccelerator_add, NULL)
-  PHP_FE(eaccelerator_get, NULL)
+  PHP_FE(eaccelerator_cas, NULL)
+  PHP_FE(eaccelerator_get, arginfo_eaccelerator_get)
   PHP_FE(eaccelerator_rm, NULL)
   PHP_FE(eaccelerator_gc, NULL)
   PHP_FE(eaccelerator_list_keys, NULL)

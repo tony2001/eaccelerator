@@ -372,16 +372,41 @@ PHP_FUNCTION(eaccelerator_add) /* {{{ */
 }
 /* }}} */
 
+PHP_FUNCTION(eaccelerator_cas) /* {{{ */
+{
+	char *key;
+	int key_len;
+	zval *val;
+	time_t ttl = 0;
+	long cas = 0;
+
+	if (zend_parse_parameters (ZEND_NUM_ARGS() TSRMLS_CC, "lsz|l", &cas, &key, &key_len, &val, &ttl) == FAILURE) {
+		return;
+	}
+
+	if (eaccelerator_cas (cas, key, key_len, val, ttl TSRMLS_CC)) {
+		RETURN_TRUE;
+	}
+	RETURN_FALSE;
+}
+/* }}} */
+
 PHP_FUNCTION(eaccelerator_get) /* {{{ */
 {
 	char *key;
 	int key_len;
+	zval *cas = NULL;
+	unsigned long ui_cas = 0;
 
-	if (zend_parse_parameters (ZEND_NUM_ARGS() TSRMLS_CC, "s", &key, &key_len) == FAILURE) {
+	if (zend_parse_parameters (ZEND_NUM_ARGS() TSRMLS_CC, "s|z", &key, &key_len, &cas) == FAILURE) {
 		return;
 	}
 
-	if (eaccelerator_get (key, key_len, return_value TSRMLS_CC)) {
+	if (eaccelerator_get (key, key_len, return_value, &ui_cas TSRMLS_CC)) {
+		if (cas) {
+			zval_dtor(cas);
+			ZVAL_LONG(cas, ui_cas);
+		}
 		return;
 	}
 	RETURN_NULL();

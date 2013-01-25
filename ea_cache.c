@@ -98,6 +98,7 @@ int eaccelerator_put(const char *key, int key_len, zval * val, time_t ttl TSRMLS
 		EAG(mem) = eaccelerator_malloc2(size TSRMLS_CC);
 	}
     if (EAG(mem)) {
+		EACCELERATOR_LOCK_RW();
 		memset(EAG(mem), 0, size);
         zend_hash_init(&EAG(strings), 0, NULL, NULL, 0);
         EACCELERATOR_ALIGN(EAG(mem));
@@ -119,7 +120,6 @@ int eaccelerator_put(const char *key, int key_len, zval * val, time_t ttl TSRMLS
 		 */
 		slot = q->hv & EA_USER_HASH_MAX;
 		hv = q->hv;
-		EACCELERATOR_LOCK_RW();
 		ea_mm_instance->user_hash_cnt++;
 		q->next = ea_mm_instance->user_hash[slot];
 		q->cas = GET_NEW_CAS(ea_mm_instance);

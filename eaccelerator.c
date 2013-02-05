@@ -899,7 +899,7 @@ void ea_class_add_ref(zend_class_entry **ce)
 ZEND_DLEXPORT void eaccelerator_on_timeout(int seconds TSRMLS_DC) /* {{{ */
 {
     if (ea_mm_instance && ea_mm_instance->mm) {
-      switch (EAG(holding_lock_type)) {
+      switch (mm_get_holding_lock(ea_mm_instance->mm)) {
         case MM_LOCK_RW:
           EACCELERATOR_UNLOCK_RW();
           break;
@@ -1539,8 +1539,8 @@ PHP_MINIT_FUNCTION(eaccelerator) {
   ea_debug_init(TSRMLS_C);
 
   if (type == MODULE_PERSISTENT &&
-      strcmp(sapi_module.name, "cgi") != 0 &&
-      strcmp(sapi_module.name, "cli") != 0) {
+      strcmp(sapi_module.name, "cgi") != 0 /*&&
+      strcmp(sapi_module.name, "cli") != 0*/) {
     DBG(ea_debug_put, (EA_DEBUG, "\n=======================================\n"));
     DBG(ea_debug_printf, (EA_DEBUG, "[%d] EACCELERATOR STARTED\n", getpid()));
     DBG(ea_debug_put, (EA_DEBUG, "=======================================\n"));
@@ -1632,7 +1632,6 @@ PHP_RINIT_FUNCTION(eaccelerator)
 	EAG(original_sigabrt_handler) = signal(SIGABRT, eaccelerator_crash_handler);
 #endif
 #endif
-  EAG(holding_lock_type) = -1;
 
 	DBG(ea_debug_printf, (EA_DEBUG, "[%d] Leave RINIT\n",getpid()));
 

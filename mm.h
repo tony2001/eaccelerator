@@ -60,6 +60,7 @@ void   _mm_free_lock(MM* mm, void* p);
 void*  _mm_malloc_nolock(MM* mm, size_t size);
 void   _mm_free_nolock(MM* mm, void* p);
 size_t _mm_sizeof(MM* mm, void* x);
+int mm_get_holding_lock(MM *mm);
 
 
 const char* mm_shm_type();

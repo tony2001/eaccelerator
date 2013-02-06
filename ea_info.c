@@ -42,6 +42,7 @@
 #define NOT_ADMIN_WARNING "This script isn't in the allowed_admin_path setting!"
 
 extern eaccelerator_mm *ea_mm_instance;
+extern eaccelerator_mm *ea_mm_user_instance;
 
 /* {{{ isAdminAllowed(): check if the admin functions are allowed for the calling script */
 static int isAdminAllowed(TSRMLS_D) {
@@ -92,7 +93,7 @@ PHP_FUNCTION(eaccelerator_clean)
 	t = time (NULL);
 
 	/* Remove expired scripts from shared memory */
-	eaccelerator_prune (t);
+	eaccelerator_prune(ea_mm_instance, t);
 }
 /* }}} */
 
@@ -109,13 +110,13 @@ PHP_FUNCTION(eaccelerator_check_mtime)
 		return;
 
     if (isAdminAllowed(TSRMLS_C)) {
-        EACCELERATOR_UNPROTECT();
+        EACCELERATOR_UNPROTECT(ea_mm_instance);
         if (enable) {
             ea_mm_instance->check_mtime_enabled = 1;
         } else {
             ea_mm_instance->check_mtime_enabled = 0;
         }
-        EACCELERATOR_PROTECT();
+        EACCELERATOR_PROTECT(ea_mm_instance);
     } else {
         zend_error(E_WARNING, NOT_ADMIN_WARNING);
     }
@@ -137,13 +138,13 @@ PHP_FUNCTION(eaccelerator_caching)
 		return;
 
     if (isAdminAllowed(TSRMLS_C)) {
-        EACCELERATOR_UNPROTECT();
+        EACCELERATOR_UNPROTECT(ea_mm_instance);
         if (enable) {
             ea_mm_instance->enabled = 1;
         } else {
             ea_mm_instance->enabled = 0;
         }
-        EACCELERATOR_PROTECT();
+        EACCELERATOR_PROTECT(ea_mm_instance);
     } else {
         zend_error(E_WARNING, NOT_ADMIN_WARNING);
     }
@@ -167,8 +168,8 @@ PHP_FUNCTION(eaccelerator_clear)
         RETURN_NULL();
     }
 
-	EACCELERATOR_UNPROTECT ();
-	EACCELERATOR_LOCK_RW ();
+	EACCELERATOR_UNPROTECT (ea_mm_instance);
+	EACCELERATOR_LOCK_RW (ea_mm_instance);
 	for (i = 0; i < EA_HASH_SIZE; i++) {
 		p = ea_mm_instance->hash[i];
 		while (p != NULL) {
@@ -176,7 +177,7 @@ PHP_FUNCTION(eaccelerator_clear)
 			p = p->next;
 			ea_mm_instance->hash_cnt--;
 			if (r->use_cnt <= 0) {
-				eaccelerator_free_nolock (r);
+				eaccelerator_free_nolock (ea_mm_instance, r);
 			} else {
 				r->removed = 1;
 				r->next = ea_mm_instance->removed;
@@ -186,8 +187,8 @@ PHP_FUNCTION(eaccelerator_clear)
 		}
 		ea_mm_instance->hash[i] = NULL;
 	}
-	EACCELERATOR_UNLOCK_RW ();
-	EACCELERATOR_PROTECT ();
+	EACCELERATOR_UNLOCK_RW (ea_mm_instance);
+	EACCELERATOR_PROTECT (ea_mm_instance);
 
     RETURN_NULL();
 }
@@ -204,18 +205,18 @@ PHP_FUNCTION(eaccelerator_purge)
 
 	if (ea_mm_instance != NULL) {
 		ea_cache_entry *p, *q;
-		EACCELERATOR_UNPROTECT();
-		EACCELERATOR_LOCK_RW();
+		EACCELERATOR_UNPROTECT(ea_mm_instance);
+		EACCELERATOR_LOCK_RW(ea_mm_instance);
 		p = ea_mm_instance->removed;
 		ea_mm_instance->rem_cnt = 0;
 		ea_mm_instance->removed = NULL;
 		while (p != NULL) {
 			q = p->next;
-			eaccelerator_free_nolock(p);
+			eaccelerator_free_nolock(ea_mm_instance, p);
 			p = q;
 		}
-		EACCELERATOR_UNLOCK_RW();
-		EACCELERATOR_PROTECT();
+		EACCELERATOR_UNLOCK_RW(ea_mm_instance);
+		EACCELERATOR_PROTECT(ea_mm_instance);
 	}
     RETURN_NULL();
 }
@@ -431,7 +432,7 @@ PHP_FUNCTION(eaccelerator_rm) /* {{{ */
 
 PHP_FUNCTION(eaccelerator_gc) /* {{{ */
 {
-	eaccelerator_gc(TSRMLS_C);
+	eaccelerator_gc(ea_mm_user_instance TSRMLS_C);
 	RETURN_TRUE;
 }
 /* }}} */

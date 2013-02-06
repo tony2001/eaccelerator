@@ -149,32 +149,32 @@
 #endif
 
 #if defined(EACCELERATOR_PROTECT_SHM)
-#  define EACCELERATOR_PROTECT()    do {mm_protect(ea_mm_instance->mm, MM_PROT_READ);} while(0)
-#  define EACCELERATOR_UNPROTECT()  do {mm_protect(ea_mm_instance->mm, MM_PROT_READ|MM_PROT_WRITE);} while(0)
+#  define EACCELERATOR_PROTECT(instance)    do {mm_protect((instance)->mm, MM_PROT_READ);} while(0)
+#  define EACCELERATOR_UNPROTECT(instance)  do {mm_protect((instance)->mm, MM_PROT_READ|MM_PROT_WRITE);} while(0)
 #else
-#  define EACCELERATOR_PROTECT()
-#  define EACCELERATOR_UNPROTECT()
+#  define EACCELERATOR_PROTECT(instance)
+#  define EACCELERATOR_UNPROTECT(instance)
 #endif
 
-#define EACCELERATOR_LOCK_RW()    do { \
+#define EACCELERATOR_LOCK_RW(instance)    do { \
 		ZTS_LOCK();\
-		mm_lock(ea_mm_instance->mm, MM_LOCK_RW); \
+		mm_lock((instance)->mm, MM_LOCK_RW); \
 	} \
 	while(0)
 
-#define EACCELERATOR_LOCK_RD()    do { \
+#define EACCELERATOR_LOCK_RD(instance)    do { \
 		ZTS_LOCK();\
-		mm_lock(ea_mm_instance->mm, MM_LOCK_RD); \
+		mm_lock((instance)->mm, MM_LOCK_RD); \
 	} \
 	while(0)
 
-#define EACCELERATOR_UNLOCK()     do { \
-		mm_unlock(ea_mm_instance->mm); \
+#define EACCELERATOR_UNLOCK(instance)     do { \
+		mm_unlock((instance)->mm); \
 		ZTS_UNLOCK(); \
 	} while(0)
 
-#define EACCELERATOR_UNLOCK_RW()  EACCELERATOR_UNLOCK()
-#define EACCELERATOR_UNLOCK_RD()  EACCELERATOR_UNLOCK()
+#define EACCELERATOR_UNLOCK_RW(instance)  EACCELERATOR_UNLOCK((instance))
+#define EACCELERATOR_UNLOCK_RD(instance)  EACCELERATOR_UNLOCK((instance))
 
 #define EACCELERATOR_BLOCK_INTERRUPTIONS()   HANDLE_BLOCK_INTERRUPTIONS()
 #define EACCELERATOR_UNBLOCK_INTERRUPTIONS() HANDLE_UNBLOCK_INTERRUPTIONS()
@@ -186,10 +186,10 @@
 #define EA_HASH_MAX       (EA_HASH_SIZE-1)
 #define EA_USER_HASH_MAX       (EA_USER_HASH_SIZE-1)
 
-#define eaccelerator_malloc(size)        mm_malloc_lock(ea_mm_instance->mm, size)
-#define eaccelerator_free(x)             mm_free_lock(ea_mm_instance->mm, x)
-#define eaccelerator_malloc_nolock(size) mm_malloc_nolock(ea_mm_instance->mm, size)
-#define eaccelerator_free_nolock(x)      mm_free_nolock(ea_mm_instance->mm, x)
+#define eaccelerator_malloc(instance, size)        mm_malloc_lock((instance)->mm, size)
+#define eaccelerator_free(instance, x)             mm_free_lock((instance)->mm, x)
+#define eaccelerator_malloc_nolock(instance, size) mm_malloc_nolock((instance)->mm, size)
+#define eaccelerator_free_nolock(instance, x)      mm_free_nolock((instance)->mm, x)
 
 #if (defined (__GNUC__) && __GNUC__ >= 2)
 #define EACCELERATOR_PLATFORM_ALIGNMENT (__alignof__ (align_test))
@@ -405,9 +405,9 @@ extern zend_module_entry eaccelerator_module_entry;
 
 
 void format_size (char *s, unsigned int size, int legend);
-void eaccelerator_prune (time_t t);
+void eaccelerator_prune (eaccelerator_mm *mm_instance, time_t t);
 
-void *eaccelerator_malloc2 (size_t size TSRMLS_DC);
+void *eaccelerator_malloc2 (eaccelerator_mm* instance, size_t size TSRMLS_DC);
 
 unsigned int eaccelerator_crc32 (const char *p, size_t n);
 

@@ -42,7 +42,7 @@ extern long eaccelerator_shm_max;
 extern int binary_eaccelerator_version;
 extern int binary_php_version;
 extern int binary_zend_version;
-extern eaccelerator_mm *ea_mm_instance;
+extern eaccelerator_mm *ea_mm_user_instance;
 
 static char *build_key(const char *key, int key_len, int *xlen TSRMLS_DC) /* {{{ */
 {
@@ -77,7 +77,7 @@ int eaccelerator_put(const char *key, int key_len, zval * val, time_t ttl TSRMLS
     int xlen;
     char *xkey;
 
- 	if (ea_mm_instance == NULL) {
+	if (ea_mm_user_instance == NULL) {
 		return 0;
 	}
 
@@ -92,13 +92,13 @@ int eaccelerator_put(const char *key, int key_len, zval * val, time_t ttl TSRMLS
     size = (long) EAG(mem);
 
 	EAG(mem) = NULL;
-	EACCELERATOR_UNPROTECT();
-	EAG(mem) = eaccelerator_malloc(size);
+	EACCELERATOR_UNPROTECT(ea_mm_user_instance);
+	EAG(mem) = eaccelerator_malloc(ea_mm_user_instance, size);
 	if (EAG(mem) == NULL) {
-		EAG(mem) = eaccelerator_malloc2(size TSRMLS_CC);
+		EAG(mem) = eaccelerator_malloc2(ea_mm_user_instance, size TSRMLS_CC);
 	}
     if (EAG(mem)) {
-		EACCELERATOR_LOCK_RW();
+		EACCELERATOR_LOCK_RW(ea_mm_user_instance);
 		memset(EAG(mem), 0, size);
         zend_hash_init(&EAG(strings), 0, NULL, NULL, 0);
         EACCELERATOR_ALIGN(EAG(mem));
@@ -120,25 +120,25 @@ int eaccelerator_put(const char *key, int key_len, zval * val, time_t ttl TSRMLS
 		 */
 		slot = q->hv & EA_USER_HASH_MAX;
 		hv = q->hv;
-		ea_mm_instance->user_hash_cnt++;
-		q->next = ea_mm_instance->user_hash[slot];
-		q->cas = GET_NEW_CAS(ea_mm_instance);
-		ea_mm_instance->user_hash[slot] = q;
+		ea_mm_user_instance->user_hash_cnt++;
+		q->next = ea_mm_user_instance->user_hash[slot];
+		q->cas = GET_NEW_CAS(ea_mm_user_instance);
+		ea_mm_user_instance->user_hash[slot] = q;
 		p = q->next;
 		while (p != NULL) {
 			if ((p->hv == hv) && (strcmp(p->key, xkey) == 0)) {
-				ea_mm_instance->user_hash_cnt--;
+				ea_mm_user_instance->user_hash_cnt--;
 				q->next = p->next;
-				eaccelerator_free_nolock(p);
+				eaccelerator_free_nolock(ea_mm_user_instance, p);
 				break;
 			}
 			q = p;
 			p = p->next;
 		}
-		EACCELERATOR_UNLOCK_RW();
+		EACCELERATOR_UNLOCK_RW(ea_mm_user_instance);
 		ret = 1;
 	}
-	EACCELERATOR_PROTECT();
+	EACCELERATOR_PROTECT(ea_mm_user_instance);
 
 	if (xlen != key_len)
         efree(xkey);
@@ -157,7 +157,7 @@ int eaccelerator_add(const char *key, int key_len, zval * val, time_t ttl TSRMLS
 	int xlen;
 	char *xkey;
 
-	if (ea_mm_instance == NULL) {
+	if (ea_mm_user_instance == NULL) {
 		return 0;
 	}
 
@@ -165,11 +165,11 @@ int eaccelerator_add(const char *key, int key_len, zval * val, time_t ttl TSRMLS
 	hv = zend_get_hash_value(xkey, xlen + 1);
 	slot = hv & EA_USER_HASH_MAX;
 
-	EACCELERATOR_UNPROTECT();
-	EACCELERATOR_LOCK_RW();
+	EACCELERATOR_UNPROTECT(ea_mm_user_instance);
+	EACCELERATOR_LOCK_RW(ea_mm_user_instance);
 
 	q = NULL;
-	p = ea_mm_instance->user_hash[slot];
+	p = ea_mm_user_instance->user_hash[slot];
 	while (p != NULL) {
 		if ((p->hv == hv) && (strcmp(p->key, xkey) == 0)) {
 			x = p;
@@ -180,8 +180,8 @@ int eaccelerator_add(const char *key, int key_len, zval * val, time_t ttl TSRMLS
 	}
 
 	if (x) {
-		EACCELERATOR_UNLOCK_RW();
-		EACCELERATOR_PROTECT();
+		EACCELERATOR_UNLOCK_RW(ea_mm_user_instance);
+		EACCELERATOR_PROTECT(ea_mm_user_instance);
 		/* an item with such key already exists, bail out */
 		if (xlen != key_len) {
 			efree(xkey);
@@ -199,7 +199,7 @@ int eaccelerator_add(const char *key, int key_len, zval * val, time_t ttl TSRMLS
 	size = (long) EAG(mem);
 
 	EAG(mem) = NULL;
-	EAG(mem) = eaccelerator_malloc_nolock(size);
+	EAG(mem) = eaccelerator_malloc_nolock(ea_mm_user_instance, size);
 	if (EAG(mem)) {
 		memset(EAG(mem), 0, size);
 		zend_hash_init(&EAG(strings), 0, NULL, NULL, 0);
@@ -223,16 +223,16 @@ int eaccelerator_add(const char *key, int key_len, zval * val, time_t ttl TSRMLS
 		slot = q->hv & EA_USER_HASH_MAX;
 		hv = q->hv;
 
-		ea_mm_instance->user_hash_cnt++;
-		q->next = ea_mm_instance->user_hash[slot];
-		q->cas = GET_NEW_CAS(ea_mm_instance);
-		ea_mm_instance->user_hash[slot] = q;
+		ea_mm_user_instance->user_hash_cnt++;
+		q->next = ea_mm_user_instance->user_hash[slot];
+		q->cas = GET_NEW_CAS(ea_mm_user_instance);
+		ea_mm_user_instance->user_hash[slot] = q;
 		p = q->next;
 		while (p != NULL) {
 			if ((p->hv == hv) && (strcmp(p->key, xkey) == 0)) {
-				ea_mm_instance->user_hash_cnt--;
+				ea_mm_user_instance->user_hash_cnt--;
 				q->next = p->next;
-				eaccelerator_free_nolock(p);
+				eaccelerator_free_nolock(ea_mm_user_instance, p);
 				break;
 			}
 			q = p;
@@ -240,8 +240,8 @@ int eaccelerator_add(const char *key, int key_len, zval * val, time_t ttl TSRMLS
 		}
 		ret = 1;
 	}
-	EACCELERATOR_UNLOCK_RW();
-	EACCELERATOR_PROTECT();
+	EACCELERATOR_UNLOCK_RW(ea_mm_user_instance);
+	EACCELERATOR_PROTECT(ea_mm_user_instance);
 
 	if (xlen != key_len) {
 		efree(xkey);
@@ -260,7 +260,7 @@ int eaccelerator_cas(unsigned long cas, const char *key, int key_len, zval * val
 	int xlen;
 	char *xkey;
 
-	if (ea_mm_instance == NULL) {
+	if (ea_mm_user_instance == NULL) {
 		return 0;
 	}
 
@@ -268,11 +268,11 @@ int eaccelerator_cas(unsigned long cas, const char *key, int key_len, zval * val
 	hv = zend_get_hash_value(xkey, xlen + 1);
 	slot = hv & EA_USER_HASH_MAX;
 
-	EACCELERATOR_UNPROTECT();
-	EACCELERATOR_LOCK_RW();
+	EACCELERATOR_UNPROTECT(ea_mm_user_instance);
+	EACCELERATOR_LOCK_RW(ea_mm_user_instance);
 
 	q = NULL;
-	p = ea_mm_instance->user_hash[slot];
+	p = ea_mm_user_instance->user_hash[slot];
 	while (p != NULL) {
 		if ((p->hv == hv) && (strcmp(p->key, xkey) == 0)) {
 			x = p;
@@ -284,8 +284,8 @@ int eaccelerator_cas(unsigned long cas, const char *key, int key_len, zval * val
 
 	/* if such item doesn't exist or has a different CAS */
 	if (!x || (cas != 0 && x->cas != cas)) {
-		EACCELERATOR_UNLOCK_RW();
-		EACCELERATOR_PROTECT();
+		EACCELERATOR_UNLOCK_RW(ea_mm_user_instance);
+		EACCELERATOR_PROTECT(ea_mm_user_instance);
 		if (xlen != key_len) {
 			efree(xkey);
 		}
@@ -302,7 +302,7 @@ int eaccelerator_cas(unsigned long cas, const char *key, int key_len, zval * val
 	size = (long) EAG(mem);
 
 	EAG(mem) = NULL;
-	EAG(mem) = eaccelerator_malloc_nolock(size);
+	EAG(mem) = eaccelerator_malloc_nolock(ea_mm_user_instance, size);
 	if (EAG(mem)) {
 		memset(EAG(mem), 0, size);
 		zend_hash_init(&EAG(strings), 0, NULL, NULL, 0);
@@ -326,16 +326,16 @@ int eaccelerator_cas(unsigned long cas, const char *key, int key_len, zval * val
 		slot = q->hv & EA_USER_HASH_MAX;
 		hv = q->hv;
 
-		ea_mm_instance->user_hash_cnt++;
-		q->next = ea_mm_instance->user_hash[slot];
-		q->cas = GET_NEW_CAS(ea_mm_instance);
-		ea_mm_instance->user_hash[slot] = q;
+		ea_mm_user_instance->user_hash_cnt++;
+		q->next = ea_mm_user_instance->user_hash[slot];
+		q->cas = GET_NEW_CAS(ea_mm_user_instance);
+		ea_mm_user_instance->user_hash[slot] = q;
 		p = q->next;
 		while (p != NULL) {
 			if ((p->hv == hv) && (strcmp(p->key, xkey) == 0)) {
-				ea_mm_instance->user_hash_cnt--;
+				ea_mm_user_instance->user_hash_cnt--;
 				q->next = p->next;
-				eaccelerator_free_nolock(p);
+				eaccelerator_free_nolock(ea_mm_user_instance, p);
 				break;
 			}
 			q = p;
@@ -343,8 +343,8 @@ int eaccelerator_cas(unsigned long cas, const char *key, int key_len, zval * val
 		}
 		ret = 1;
 	}
-	EACCELERATOR_UNLOCK_RW();
-	EACCELERATOR_PROTECT();
+	EACCELERATOR_UNLOCK_RW(ea_mm_user_instance);
+	EACCELERATOR_PROTECT(ea_mm_user_instance);
 
 	if (xlen != key_len) {
 		efree(xkey);
@@ -362,7 +362,7 @@ int eaccelerator_get(const char *key, int key_len, zval * return_value, unsigned
 	ea_user_cache_entry *p;
 	ea_user_cache_entry *x = NULL;
 
- 	if (ea_mm_instance == NULL) {
+	if (ea_mm_user_instance == NULL) {
 		return 0;
 	}
 
@@ -370,9 +370,9 @@ int eaccelerator_get(const char *key, int key_len, zval * return_value, unsigned
     hv = zend_get_hash_value(xkey, xlen + 1);
     slot = hv & EA_USER_HASH_MAX;
 
-	EACCELERATOR_UNPROTECT();
-	EACCELERATOR_LOCK_RD();
-	p = ea_mm_instance->user_hash[slot];
+	EACCELERATOR_UNPROTECT(ea_mm_user_instance);
+	EACCELERATOR_LOCK_RD(ea_mm_user_instance);
+	p = ea_mm_user_instance->user_hash[slot];
 	while (p != NULL) {
 		if ((p->hv == hv) && (strcmp(p->key, xkey) == 0)) {
 			x = p;
@@ -390,12 +390,12 @@ int eaccelerator_get(const char *key, int key_len, zval * return_value, unsigned
 			efree(xkey);
 		}
 		*cas = x->cas;
-		EACCELERATOR_UNLOCK_RD();
-		EACCELERATOR_PROTECT();
+		EACCELERATOR_UNLOCK_RD(ea_mm_user_instance);
+		EACCELERATOR_PROTECT(ea_mm_user_instance);
 		return 1;
 	}
-	EACCELERATOR_UNLOCK_RD();
-	EACCELERATOR_PROTECT();
+	EACCELERATOR_UNLOCK_RD(ea_mm_user_instance);
+	EACCELERATOR_PROTECT(ea_mm_user_instance);
     return 0;
 }
 /* }}} */
@@ -408,7 +408,7 @@ int eaccelerator_rm(const char *key, int key_len TSRMLS_DC) /* {{{ */
     int xlen;
     char *xkey;
 
- 	if (ea_mm_instance == NULL) {
+	if (ea_mm_user_instance == NULL) {
 		return 0;
 	}
 
@@ -417,26 +417,26 @@ int eaccelerator_rm(const char *key, int key_len TSRMLS_DC) /* {{{ */
 	hv = zend_get_hash_value(xkey, xlen + 1);
 	slot = hv & EA_USER_HASH_MAX;
 
-	EACCELERATOR_UNPROTECT();
-	EACCELERATOR_LOCK_RW();
+	EACCELERATOR_UNPROTECT(ea_mm_user_instance);
+	EACCELERATOR_LOCK_RW(ea_mm_user_instance);
 	q = NULL;
-	p = ea_mm_instance->user_hash[slot];
+	p = ea_mm_user_instance->user_hash[slot];
 	while (p != NULL) {
 		if ((p->hv == hv) && (strcmp(p->key, xkey) == 0)) {
 			if (q == NULL) {
-				ea_mm_instance->user_hash[slot] = p->next;
+				ea_mm_user_instance->user_hash[slot] = p->next;
 			} else {
 				q->next = p->next;
 			}
-			ea_mm_instance->user_hash_cnt--;
-			eaccelerator_free_nolock(p);
+			ea_mm_user_instance->user_hash_cnt--;
+			eaccelerator_free_nolock(ea_mm_user_instance, p);
 			break;
 		}
 		q = p;
 		p = p->next;
 	}
-	EACCELERATOR_UNLOCK_RW();
-	EACCELERATOR_PROTECT();
+	EACCELERATOR_UNLOCK_RW(ea_mm_user_instance);
+	EACCELERATOR_PROTECT(ea_mm_user_instance);
     if (xlen != key_len) {
         efree(xkey);
     }
@@ -445,34 +445,34 @@ int eaccelerator_rm(const char *key, int key_len TSRMLS_DC) /* {{{ */
 /* }}} */
 
 /* do garbage collection on the keys */
-size_t eaccelerator_gc(TSRMLS_D) /* {{{ */
+size_t eaccelerator_gc(eaccelerator_mm *mm_instance TSRMLS_DC) /* {{{ */
 {
     size_t size = 0;
     unsigned int i;
     time_t t = time(0);
 
-    if (ea_mm_instance == NULL) {
+    if (mm_instance == NULL) {
         return 0;
     }
 
-    EACCELERATOR_UNPROTECT();
-    EACCELERATOR_LOCK_RW();
+    EACCELERATOR_UNPROTECT(ea_mm_user_instance);
+    EACCELERATOR_LOCK_RW(ea_mm_user_instance);
     for (i = 0; i < EA_USER_HASH_SIZE; i++) {
-        ea_user_cache_entry **p = &ea_mm_instance->user_hash[i];
+        ea_user_cache_entry **p = &ea_mm_user_instance->user_hash[i];
         while (*p != NULL) {
             if ((*p)->ttl != 0 && (*p)->ttl < t) {
                 ea_user_cache_entry *r = *p;
                 *p = (*p)->next;
-                ea_mm_instance->user_hash_cnt--;
+                ea_mm_user_instance->user_hash_cnt--;
                 size += r->size;
-                eaccelerator_free_nolock(r);
+                eaccelerator_free_nolock(ea_mm_user_instance, r);
             } else {
                 p = &(*p)->next;
             }
         }
     }
-    EACCELERATOR_UNLOCK_RW();
-    EACCELERATOR_PROTECT();
+    EACCELERATOR_UNLOCK_RW(ea_mm_user_instance);
+    EACCELERATOR_PROTECT(ea_mm_user_instance);
     return size;
 }
 /* }}} */
@@ -486,7 +486,7 @@ int eaccelerator_list_keys(zval *return_value TSRMLS_DC) /* {{{ */
     ea_user_cache_entry *p;
     time_t t = time(0);
 
- 	if (ea_mm_instance == NULL) {
+	if (ea_mm_user_instance == NULL) {
 		return 0;
 	}
 
@@ -501,7 +501,7 @@ int eaccelerator_list_keys(zval *return_value TSRMLS_DC) /* {{{ */
     array_init(return_value);
 
     for (i = 0; i < EA_USER_HASH_SIZE; ++i) {
-        p = ea_mm_instance->user_hash[i];
+        p = ea_mm_user_instance->user_hash[i];
         while(p != NULL) {
             if (!xlen || strncmp(p->key, xkey, xlen) == 0) {
                 list = NULL;

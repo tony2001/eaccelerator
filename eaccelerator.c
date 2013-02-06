@@ -81,11 +81,13 @@ ZEND_DECLARE_MODULE_GLOBALS(eaccelerator)
 
 /* Globals (common for each process/thread) */
 static long ea_shm_size = 0;
+static long ea_user_shm_size = 0;
 static long ea_shm_ttl = 0;
 static long ea_shm_prune_period = 0;
 extern long ea_debug;
 
 eaccelerator_mm* ea_mm_instance = NULL;
+eaccelerator_mm* ea_mm_user_instance = NULL;
 static int ea_is_zend_extension = 0;
 static int ea_is_extension      = 0;
 zend_extension* ZendOptimizer = NULL;
@@ -128,7 +130,7 @@ static ea_cache_entry* hash_find_mm(const char *key, struct stat *buf, int *nrel
   hv = zend_get_hash_value((char *)key, strlen(key) + 1);
   slot = hv & EA_HASH_MAX;
 
-  EACCELERATOR_LOCK_RD();
+  EACCELERATOR_LOCK_RD(ea_mm_instance);
   q = NULL;
   p = ea_mm_instance->hash[slot];
   while (p != NULL) {
@@ -161,21 +163,21 @@ static ea_cache_entry* hash_find_mm(const char *key, struct stat *buf, int *nrel
            ea_mm_instance->removed = p;
            ea_mm_instance->rem_cnt++; */
 
-        EACCELERATOR_UNLOCK_RD();
+        EACCELERATOR_UNLOCK_RD(ea_mm_instance);
         return NULL;
       } else {
         /* key is valid */
         atomic_fetch_add(&p->nhits, 1);
         atomic_fetch_add(&p->use_cnt, 1);
         p->ttl = ttl;
-        EACCELERATOR_UNLOCK_RD();
+        EACCELERATOR_UNLOCK_RD(ea_mm_instance);
         return p;
       }
     }
     q = p;
     p = p->next;
   }
-  EACCELERATOR_UNLOCK_RD();
+  EACCELERATOR_UNLOCK_RD(ea_mm_instance);
   return NULL;
 }
 /* }}} */
@@ -188,7 +190,7 @@ static void hash_add_mm(ea_cache_entry *x) /* {{{ */
   x->hv = zend_get_hash_value(x->realfilename, x->realfilename_len + 1);
   slot = x->hv & EA_HASH_MAX;
 
-  EACCELERATOR_LOCK_RW();
+  EACCELERATOR_LOCK_RW(ea_mm_instance);
   x->next = ea_mm_instance->hash[slot];
   ea_mm_instance->hash[slot] = x;
   ea_mm_instance->hash_cnt++;
@@ -212,33 +214,35 @@ static void hash_add_mm(ea_cache_entry *x) /* {{{ */
         p->next = ea_mm_instance->removed;
         ea_mm_instance->removed = p;
         ea_mm_instance->rem_cnt++;
-        EACCELERATOR_UNLOCK_RW();
+        EACCELERATOR_UNLOCK_RW(ea_mm_instance);
         return;
       } else {
         /* key is unused. Remove it. */
-        eaccelerator_free_nolock(p);
-        EACCELERATOR_UNLOCK_RW();
+        eaccelerator_free_nolock(ea_mm_instance, p);
+        EACCELERATOR_UNLOCK_RW(ea_mm_instance);
         return;
       }
     }
     q = p;
     p = p->next;
   }
-  EACCELERATOR_UNLOCK_RW();
+  EACCELERATOR_UNLOCK_RW(ea_mm_instance);
 }
 /* }}} */
 
 /* Initialise the shared memory */
 static int init_mm(TSRMLS_D) {
   pid_t  owner = getpid();
-  MM     *mm;
+  MM     *mm, *mm_user;
   size_t total;
-  char   mm_path[MAXPATHLEN];
+  char   mm_path[MAXPATHLEN], mm_user_path[MAXPATHLEN];
 
 #ifdef ZEND_WIN32
     snprintf(mm_path, MAXPATHLEN, "%s.%s", EACCELERATOR_MM_FILE, sapi_module.name);
+    snprintf(mm_user_path, MAXPATHLEN, "user_data_%s.%s", EACCELERATOR_MM_FILE, sapi_module.name);
 #else
     snprintf(mm_path, MAXPATHLEN, "%s.%s%d", EACCELERATOR_MM_FILE, sapi_module.name, owner);
+    snprintf(mm_user_path, MAXPATHLEN, "user_data_%s.%s%d", EACCELERATOR_MM_FILE, sapi_module.name, owner);
 #endif
 /*  snprintf(mm_path, MAXPATHLEN, "%s.%s%d", EACCELERATOR_MM_FILE, sapi_module.name, geteuid());*/
   if ((ea_mm_instance = (eaccelerator_mm*)mm_attach(ea_shm_size*1024*1024, mm_path)) != NULL) {
@@ -247,10 +251,21 @@ static int init_mm(TSRMLS_D) {
 #endif
     return SUCCESS;
   }
+
+  if ((ea_mm_user_instance = (eaccelerator_mm*)mm_attach(ea_user_shm_size*1024*1024, mm_user_path)) != NULL) {
+    return SUCCESS;
+  }
+
   mm = mm_create(ea_shm_size*1024*1024, mm_path);
   if (!mm) {
     return FAILURE;
   }
+  
+  mm_user = mm_create(ea_user_shm_size*1024*1024, mm_user_path);
+  if (!mm_user) {
+    return FAILURE;
+  }
+
 #ifdef ZEND_WIN32
   DBG(ea_debug_printf, (EA_DEBUG, "init_mm [%d]\n", owner));
 #else
@@ -278,7 +293,28 @@ static int init_mm(TSRMLS_D) {
   ea_mm_instance->last_prune = time(NULL);	/* this time() call is harmless since this is init phase */
   ea_mm_instance->start_time = time(NULL);
   ea_mm_instance->cas = 0;
-  EACCELERATOR_PROTECT();
+  EACCELERATOR_PROTECT(ea_mm_instance);
+
+  total = mm_available(mm_user);
+  ea_mm_user_instance = mm_malloc_lock(mm_user, sizeof(*ea_mm_instance));
+  if (!ea_mm_user_instance) {
+    return FAILURE;
+  }
+  mm_set_attach(mm_user, ea_mm_user_instance);
+  memset(ea_mm_user_instance, 0, sizeof(*ea_mm_instance));
+  ea_mm_user_instance->owner = owner;
+  ea_mm_user_instance->mm    = mm_user;
+  ea_mm_user_instance->total = total;
+  ea_mm_user_instance->hash_cnt = 0;
+  ea_mm_user_instance->user_hash_cnt = 0;
+  ea_mm_user_instance->rem_cnt  = 0;
+  ea_mm_user_instance->enabled = 1;
+  ea_mm_user_instance->check_mtime_enabled = 1;
+  ea_mm_user_instance->removed = NULL;
+  ea_mm_user_instance->last_prune = time(NULL);	/* this time() call is harmless since this is init phase */
+  ea_mm_user_instance->start_time = time(NULL);
+  ea_mm_user_instance->cas = 0;
+  EACCELERATOR_PROTECT(ea_mm_user_instance);
   return SUCCESS;
 }
 
@@ -397,13 +433,13 @@ static void decode_version(int version, int extra, char *str, size_t len)
 #endif
 
 /* Remove expired keys, content and scripts from the memory cache */
-void eaccelerator_prune(time_t t) {
+void eaccelerator_prune(eaccelerator_mm *mm_instance, time_t t) {
   unsigned int i;
 
-  EACCELERATOR_LOCK_RW();
-  ea_mm_instance->last_prune = t;
+  EACCELERATOR_LOCK_RW(mm_instance);
+  mm_instance->last_prune = t;
   for (i = 0; i < EA_HASH_SIZE; i++) {
-    ea_cache_entry **p = &ea_mm_instance->hash[i];
+    ea_cache_entry **p = &mm_instance->hash[i];
     while (*p != NULL) {
       struct stat buf;
       if (((*p)->ttl != 0 && (*p)->ttl < t && (*p)->use_cnt <= 0) ||
@@ -413,30 +449,30 @@ void eaccelerator_prune(time_t t) {
         ea_cache_entry *r = *p;
         *p = (*p)->next;
         ea_mm_instance->hash_cnt--;
-        eaccelerator_free_nolock(r);
+        eaccelerator_free_nolock(mm_instance, r);
       } else {
         p = &(*p)->next;
       }
     }
   }
-  EACCELERATOR_UNLOCK_RW();
+  EACCELERATOR_UNLOCK_RW(mm_instance);
 }
 
 /* Allocate a new cache chunk */
-void* eaccelerator_malloc2(size_t size TSRMLS_DC) {
+void* eaccelerator_malloc2(eaccelerator_mm *mm_instance, size_t size TSRMLS_DC) {
   void *p = NULL;
 
-  if (eaccelerator_gc(TSRMLS_C) > 0) {
-    p = eaccelerator_malloc(size);
+  if (eaccelerator_gc(mm_instance TSRMLS_CC) > 0) {
+    p = eaccelerator_malloc(mm_instance, size);
     if (p != NULL) {
       return p;
     }
   }
 
   if (ea_shm_prune_period > 0) {
-    if (EAG(req_start) - ea_mm_instance->last_prune > ea_shm_prune_period) {
-      eaccelerator_prune(EAG(req_start));
-      p = eaccelerator_malloc(size);
+    if (EAG(req_start) - mm_instance->last_prune > ea_shm_prune_period) {
+      eaccelerator_prune(mm_instance, EAG(req_start));
+      p = eaccelerator_malloc(mm_instance, size);
     }
   }
   return p;
@@ -541,10 +577,10 @@ static int eaccelerator_store(char* key, struct stat *buf, int nreloads,
   DBG(ea_debug_pad, (EA_DEBUG TSRMLS_CC));
   DBG(ea_debug_printf, (EA_DEBUG, "[%d] eaccelerator_store:  returned %d, mm=%x\n", getpid(), size, ea_mm_instance->mm));
   
-  EACCELERATOR_UNPROTECT();
-  EAG(mem) = eaccelerator_malloc(size);
+  EACCELERATOR_UNPROTECT(ea_mm_instance);
+  EAG(mem) = eaccelerator_malloc(ea_mm_instance, size);
   if (EAG(mem) == NULL) {
-    EAG(mem) = eaccelerator_malloc2(size TSRMLS_CC);
+    EAG(mem) = eaccelerator_malloc2(ea_mm_instance, size TSRMLS_CC);
   }
   if (EAG(mem)) {
     data = EAG(mem);
@@ -562,7 +598,7 @@ static int eaccelerator_store(char* key, struct stat *buf, int nreloads,
       p->ttl = 0;
     }
     hash_add_mm(p);
-    EACCELERATOR_PROTECT();
+    EACCELERATOR_PROTECT(ea_mm_instance);
     ret = 1;
     mm_check_mem(data);
   }
@@ -896,18 +932,25 @@ void ea_class_add_ref(zend_class_entry **ce)
 	(*ce)->refcount++;
 }
 
-ZEND_DLEXPORT void eaccelerator_on_timeout(int seconds TSRMLS_DC) /* {{{ */
+inline static void ea_unlock_instance(eaccelerator_mm *instance) /* {{{ */
 {
-    if (ea_mm_instance && ea_mm_instance->mm) {
-      switch (mm_get_holding_lock(ea_mm_instance->mm)) {
+    if (instance && instance->mm) {
+      switch (mm_get_holding_lock(instance->mm)) {
         case MM_LOCK_RW:
-          EACCELERATOR_UNLOCK_RW();
+          EACCELERATOR_UNLOCK_RW(instance);
           break;
         case MM_LOCK_RD:
-          EACCELERATOR_UNLOCK_RD();
+          EACCELERATOR_UNLOCK_RD(instance);
           break;
       }
     }
+}
+/* }}} */
+
+ZEND_DLEXPORT void eaccelerator_on_timeout(int seconds TSRMLS_DC) /* {{{ */
+{
+    ea_unlock_instance(ea_mm_instance);
+    ea_unlock_instance(ea_mm_user_instance);
     ea_saved_on_timeout(seconds TSRMLS_CC);
 }
 /* }}} */
@@ -1226,10 +1269,11 @@ PHP_MINFO_FUNCTION(eaccelerator) {
     size_t available;
 		char *start_time;
 
-    EACCELERATOR_UNPROTECT();
+    EACCELERATOR_UNPROTECT(ea_mm_instance);
     available = mm_available(ea_mm_instance->mm);
-    EACCELERATOR_LOCK_RD();
-    EACCELERATOR_PROTECT();
+    EACCELERATOR_LOCK_RD(ea_mm_instance);
+    EACCELERATOR_PROTECT(ea_mm_instance);
+    php_info_print_table_header(1, "Scripts segment");
     format_size(s, ea_mm_instance->total, 1);
     php_info_print_table_row(2, "Memory Size", s);
     format_size(s, available, 1);
@@ -1238,16 +1282,31 @@ PHP_MINFO_FUNCTION(eaccelerator) {
     php_info_print_table_row(2, "Memory Allocated", s);
     snprintf(s, 32, "%u", ea_mm_instance->hash_cnt);
     php_info_print_table_row(2, "Cached Scripts", s);
-    snprintf(s, 32, "%u", ea_mm_instance->user_hash_cnt);
-    php_info_print_table_row(2, "Cached User Variables", s);
     snprintf(s, 32, "%u", ea_mm_instance->rem_cnt);
     php_info_print_table_row(2, "Removed Scripts", s);
 		start_time = php_format_date("d-M-Y H:i:s", 11, ea_mm_instance->start_time, 1 TSRMLS_CC);
     php_info_print_table_row(2, "Start time", start_time);
 		efree(start_time);
-    EACCELERATOR_UNPROTECT();
-    EACCELERATOR_UNLOCK_RD();
-    EACCELERATOR_PROTECT();
+    EACCELERATOR_UNPROTECT(ea_mm_instance);
+    EACCELERATOR_UNLOCK_RD(ea_mm_instance);
+    EACCELERATOR_PROTECT(ea_mm_instance);
+
+    EACCELERATOR_UNPROTECT(ea_mm_user_instance);
+    available = mm_available(ea_mm_user_instance->mm);
+    EACCELERATOR_LOCK_RD(ea_mm_user_instance);
+    EACCELERATOR_PROTECT(ea_mm_user_instance);
+    php_info_print_table_header(1, "User data segment");
+    format_size(s, ea_mm_user_instance->total, 1);
+    php_info_print_table_row(2, "Memory Size", s);
+    format_size(s, available, 1);
+    php_info_print_table_row(2, "Memory Available", s);
+    format_size(s, ea_mm_user_instance->total - available, 1);
+    php_info_print_table_row(2, "Memory Allocated", s);
+    snprintf(s, 32, "%u", ea_mm_user_instance->user_hash_cnt);
+    php_info_print_table_row(2, "Cached User Variables", s);
+    EACCELERATOR_UNPROTECT(ea_mm_user_instance);
+    EACCELERATOR_UNLOCK_RD(ea_mm_user_instance);
+    EACCELERATOR_PROTECT(ea_mm_user_instance);
   }
   php_info_print_table_end();
 
@@ -1299,6 +1358,7 @@ static PHP_INI_MH(eaccelerator_OnUpdateLong) {
 
 PHP_INI_BEGIN()
 STD_PHP_INI_ENTRY("eaccelerator.enable",         "1", PHP_INI_ALL, OnUpdateBool, enabled, zend_eaccelerator_globals, eaccelerator_globals)
+ZEND_INI_ENTRY1("eaccelerator.user_shm_size",        "0", PHP_INI_SYSTEM, eaccelerator_OnUpdateLong, &ea_user_shm_size)
 ZEND_INI_ENTRY1("eaccelerator.shm_size",        "0", PHP_INI_SYSTEM, eaccelerator_OnUpdateLong, &ea_shm_size)
 ZEND_INI_ENTRY1("eaccelerator.shm_ttl",         "0", PHP_INI_SYSTEM, eaccelerator_OnUpdateLong, &ea_shm_ttl)
 ZEND_INI_ENTRY1("eaccelerator.shm_prune_period", "0", PHP_INI_SYSTEM, eaccelerator_OnUpdateLong, &ea_shm_prune_period)
@@ -1310,41 +1370,41 @@ STD_PHP_INI_ENTRY("eaccelerator.name_space",       "", PHP_INI_ALL, OnUpdateStri
 PHP_INI_ENTRY("eaccelerator.filter",             "",  PHP_INI_ALL, eaccelerator_filter)
 PHP_INI_END()
 
-static void eaccelerator_clean_request(TSRMLS_D) {
+static void eaccelerator_clean_request(eaccelerator_mm *mm_instance TSRMLS_DC) {
   ea_used_entry  *p = (ea_used_entry*)EAG(used_entries);
 	ea_cache_entry *q, *e;
 	int i;
 
-  if (ea_mm_instance != NULL) {
+  if (mm_instance != NULL) {
     EACCELERATOR_UNPROTECT();
     if (p != NULL) {
       /* we know for sure there are no removed entries */
-      if (ea_mm_instance->rem_cnt <= 0) {
-        EACCELERATOR_LOCK_RD();
+      if (mm_instance->rem_cnt <= 0) {
+        EACCELERATOR_LOCK_RD(mm_instance);
         while (p != NULL) {
           atomic_fetch_add(&p->entry->use_cnt, -1);
           p = p->next;
         }
-        EACCELERATOR_UNLOCK_RD();
+        EACCELERATOR_UNLOCK_RD(mm_instance);
       } else {
-        EACCELERATOR_LOCK_RW();
+        EACCELERATOR_LOCK_RW(mm_instance);
         while (p != NULL) {
           p->entry->use_cnt--;
           if (p->entry->removed && p->entry->use_cnt <= 0) {
-            if (ea_mm_instance->removed == p->entry) {
-              ea_mm_instance->removed = p->entry->next;
-              ea_mm_instance->rem_cnt--;
-              eaccelerator_free_nolock(p->entry);
+            if (mm_instance->removed == p->entry) {
+              mm_instance->removed = p->entry->next;
+              mm_instance->rem_cnt--;
+              eaccelerator_free_nolock(mm_instance, p->entry);
               p->entry = NULL;
             } else {
-              q = ea_mm_instance->removed;
+              q = mm_instance->removed;
                while (q != NULL && q->next != p->entry) {
                 q = q->next;
               }
               if (q != NULL) {
                 q->next = p->entry->next;
-                ea_mm_instance->rem_cnt--;
-                eaccelerator_free_nolock(p->entry);
+                mm_instance->rem_cnt--;
+                eaccelerator_free_nolock(mm_instance, p->entry);
                 p->entry = NULL;
               }
             }
@@ -1353,22 +1413,22 @@ static void eaccelerator_clean_request(TSRMLS_D) {
         }
 
   			/* remove all entries marked as removed */
-  			if (ea_mm_instance->rem_cnt > 0) {
+  			if (mm_instance->rem_cnt > 0) {
 	  			for (i = 0; i < EA_HASH_SIZE; i++) {
-		  			e = ea_mm_instance->hash[i];
+		  			e = mm_instance->hash[i];
 			  		q = NULL;
 				  	while (e != NULL) {
   						ea_cache_entry *r = e;
 	  					e = e->next;
 		  				if (r->removed && r->use_cnt <= 0) {
 		 	  				if (q == NULL) {
-				  				ea_mm_instance->hash[i] = r->next;
+				  				mm_instance->hash[i] = r->next;
 					  		} else {
 						  		q->next = r->next;
   							}
-	  						eaccelerator_free_nolock (r);
-		  				  ea_mm_instance->hash_cnt--;
-			 	  			if (--ea_mm_instance->rem_cnt == 0) {
+	  						eaccelerator_free_nolock(mm_instance, r);
+		  				  mm_instance->hash_cnt--;
+			 	  			if (--mm_instance->rem_cnt == 0) {
 			  					goto cleanup_finished;
 					  		}
   						} else {
@@ -1378,16 +1438,16 @@ static void eaccelerator_clean_request(TSRMLS_D) {
   				}
 			  }
 cleanup_finished:
-        EACCELERATOR_UNLOCK_RW();
+        EACCELERATOR_UNLOCK_RW(mm_instance);
       }
     }
-    EACCELERATOR_PROTECT();
+    EACCELERATOR_PROTECT(mm_instance);
     p = (ea_used_entry*)EAG(used_entries);
     while (p != NULL) {
       ea_used_entry* r = p;
       p = p->next;
       if (r->entry != NULL && r->entry->use_cnt < 0) {
-        eaccelerator_free(r->entry);
+        eaccelerator_free(mm_instance, r->entry);
       }
       efree(r);
     }
@@ -1439,7 +1499,8 @@ static void eaccelerator_crash_handler(int dummy) {
     signal(SIGABRT, SIG_DFL);
   }
 #endif
-  eaccelerator_clean_request(TSRMLS_C);
+  eaccelerator_clean_request(ea_mm_instance TSRMLS_CC);
+  eaccelerator_clean_request(ea_mm_user_instance TSRMLS_CC);
 
   loctime = localtime(&EAG(req_start));
 
@@ -1715,7 +1776,8 @@ PHP_RSHUTDOWN_FUNCTION(eaccelerator)
 #endif
 #endif
 	DBG(ea_debug_printf, (EA_DEBUG, "[%d] Enter RSHUTDOWN\n",getpid()));
-	eaccelerator_clean_request(TSRMLS_C);
+	eaccelerator_clean_request(ea_mm_instance TSRMLS_CC);
+	eaccelerator_clean_request(ea_mm_user_instance TSRMLS_CC);
 	DBG(ea_debug_printf, (EA_DEBUG, "[%d] Leave RSHUTDOWN\n",getpid()));
 
 	return SUCCESS;

@@ -124,7 +124,6 @@ size_t calc_zval(zval *zv TSRMLS_DC)
 
     switch (EA_ZV_TYPE_P(zv)) {
         case IS_CONSTANT:
-        case IS_OBJECT: /* object should have been serialized before storing them */
         case IS_STRING:
             size += calc_string(Z_STRVAL_P(zv), Z_STRLEN_P(zv) + 1 TSRMLS_CC);
             break;
@@ -139,6 +138,10 @@ size_t calc_zval(zval *zv TSRMLS_DC)
 
         case IS_RESOURCE:
             DBG(ea_debug_error, ("[%d] EACCELERATOR can't cache resources\n", getpid()));
+            zend_bailout();
+            break;
+        case IS_OBJECT: /* object should have been serialized before storing them */
+            DBG(ea_debug_error, ("[%d] EACCELERATOR can't cache objects\n", getpid()));
             zend_bailout();
             break;
         default:
@@ -457,7 +460,6 @@ void store_zval(char **at, zval *zv TSRMLS_DC)
 {
     switch (EA_ZV_TYPE_P(zv)) {
         case IS_CONSTANT:
-        case IS_OBJECT: /* object should have been serialized before storing them */
         case IS_STRING:
             Z_STRVAL_P(zv) = store_string(at, Z_STRVAL_P(zv), Z_STRLEN_P(zv) + 1 TSRMLS_CC);
             break;

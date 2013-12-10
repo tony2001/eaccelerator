@@ -204,7 +204,7 @@ void ea_debug_log_hashkeys (char *p, HashTable * ht)
  */
 void ea_debug_pad (long debug_level TSRMLS_DC)
 {
-#ifdef WITH_EACCELERATOR_DEBUG /* This ifdef is still req'd because xpad is N/A in a non-debug compile */
+#ifdef WITH_EACCELERATOR_DEBUG 
     if (ea_debug & debug_level) {
 		int i;
         if (F_fp != stderr) {
@@ -263,6 +263,7 @@ void ea_debug_hash_display(HashTable * ht)
  */
 void ea_debug_dump_ea_class_entry(ea_class_entry *ce)
 {
+#ifdef WITH_EACCELERATOR_DEBUG
     fprintf(F_fp, "ea class entry: '%s' (len = %u)\n", ce->name, ce->name_length);
     fprintf(F_fp, "\tparent: '%s'\n", ce->parent);
     fprintf(F_fp, "\ttype: %d\n", ce->type);
@@ -282,6 +283,7 @@ void ea_debug_dump_ea_class_entry(ea_class_entry *ce)
     fprintf(F_fp, "\tdoc_comment_len: %u\n", ce->doc_comment_len);
 #  endif
     fflush(F_fp);
+#endif
 }
 
 /*
@@ -289,6 +291,7 @@ void ea_debug_dump_ea_class_entry(ea_class_entry *ce)
  */
 void ea_debug_dump_zend_class_entry(zend_class_entry *ce)
 {
+#ifdef WITH_EACCELERATOR_DEBUG
     fprintf(F_fp, "zend class entry: '%s' (len = %u)\n", ce->name, ce->name_length);
     fprintf(F_fp, "\tparent: '%s'\n", (ce->parent == NULL) ? "none" : ce->parent->name);
     fprintf(F_fp, "\ttype: %d\n", ce->type);
@@ -308,6 +311,7 @@ void ea_debug_dump_zend_class_entry(zend_class_entry *ce)
     fprintf(F_fp, "\tdoc_comment_len: %u\n", ce->doc_comment_len);
 #  endif
     fflush(F_fp);
+#endif
 }
 
 #endif /* #ifdef HAVE_EACCELERATOR */

@@ -62,7 +62,6 @@
 
 #include "php.h"
 #include "php_ini.h"
-#include "php_logos.h"
 #include "main/fopen_wrappers.h"
 #include "ext/standard/info.h"
 #include "ext/standard/php_incomplete_class.h"
@@ -136,24 +135,9 @@ static void shutdown_mm(TSRMLS_D) /* {{{ */
 }
 /* }}} */
 
-inline static void ea_unlock_instance(eaccelerator_mm *instance) /* {{{ */
-{
-	if (instance && instance->mm) {
-		switch (mm_get_holding_lock(instance->mm)) {
-			case MM_LOCK_RW:
-				EACCELERATOR_UNLOCK_RW(instance);
-				break;
-			case MM_LOCK_RD:
-				EACCELERATOR_UNLOCK_RD(instance);
-				break;
-		}
-	}
-}
-/* }}} */
-
 ZEND_DLEXPORT void eaccelerator_on_timeout(int seconds TSRMLS_DC) /* {{{ */
 {
-	ea_unlock_instance(ea_mm_user_instance);
+	ea_debug_error("eaccelerator_on_timeout(%d sec)", seconds);
 	ea_saved_on_timeout(seconds TSRMLS_CC);
 }
 /* }}} */
@@ -436,7 +420,7 @@ ZEND_BEGIN_ARG_INFO_EX(arginfo_eaccelerator_get, 0, 0, 1)
   ZEND_ARG_INFO(1, cas)
 ZEND_END_ARG_INFO()
 
-function_entry eaccelerator_functions[] = {
+zend_function_entry eaccelerator_functions[] = {
   PHP_FE(eaccelerator_put, NULL)
   PHP_FE(eaccelerator_add, NULL)
   PHP_FE(eaccelerator_cas, NULL)

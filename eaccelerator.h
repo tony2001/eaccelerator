@@ -160,17 +160,14 @@
 #define EACCELERATOR_LOCK_RW(instance)   \
 		EA_HANDLE_BLOCK_INTERRUPTIONS(); \
 		ZTS_LOCK();\
-		fprintf(stderr, "wrlock %s:%d\n", __FILE__, __LINE__);\
 		mm_lock((instance)->mm, MM_LOCK_RW); \
 
 #define EACCELERATOR_LOCK_RD(instance)   \
 		EA_HANDLE_BLOCK_INTERRUPTIONS(); \
 		ZTS_LOCK();\
-		fprintf(stderr, "rdlock %s:%d\n", __FILE__, __LINE__);\
 		mm_lock((instance)->mm, MM_LOCK_RD)
 
 #define EACCELERATOR_UNLOCK(instance)     \
-		fprintf(stderr, "unlock %s:%d\n", __FILE__, __LINE__);\
 		mm_unlock((instance)->mm); \
 		ZTS_UNLOCK(); \
 		EA_HANDLE_UNBLOCK_INTERRUPTIONS(); \

@@ -173,6 +173,9 @@ int eaccelerator_add(const char *key, int key_len, zval * val, time_t ttl TSRMLS
 	while (p != NULL) {
 		if ((p->hv == hv) && (strcmp(p->key, xkey) == 0)) {
 			x = p;
+			if (p->ttl != 0 && p->ttl < time(0)) {
+				x = NULL;
+			}
 			break;
 		}
 		q = p;

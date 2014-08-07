@@ -417,7 +417,7 @@ static void store_hash_int(char **at, HashTable *target, HashTable *source,
                 }
             }
 
-            np = (Bucket *)ALLOCATE(at, offsetof(Bucket, arKey) + p->nKeyLength);
+            np = (Bucket *)ALLOCATE(at, sizeof(Bucket) + p->nKeyLength);
 
             nIndex = p->h % source->nTableSize;
             if (target->arBuckets[nIndex]) {
@@ -442,8 +442,9 @@ static void store_hash_int(char **at, HashTable *target, HashTable *source,
 
             np->pListLast = prev_p;
             np->pListNext = NULL;
+			np->arKey = ((char*)np) + sizeof(Bucket);
 
-            memcpy(np->arKey, p->arKey, p->nKeyLength);
+            memcpy((char *)np->arKey, p->arKey, p->nKeyLength);
 
             if (prev_p) {
                 prev_p->pListNext = np;

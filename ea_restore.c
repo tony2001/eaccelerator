@@ -185,8 +185,7 @@ static inline HashTable *restore_hash(HashTable * target, HashTable * source, re
 	prev_p = NULL;
 	np = NULL;
 	while (p) {
-		np = (Bucket *) emalloc(offsetof(Bucket, arKey) + p->nKeyLength);
-		/*    np = (Bucket *) emalloc(sizeof(Bucket) + p->nKeyLength); */
+		np = (Bucket *) emalloc(sizeof(Bucket) + p->nKeyLength);
 		nIndex = p->h % source->nTableSize;
 		if (target->arBuckets[nIndex]) {
 			np->pNext = target->arBuckets[nIndex];
@@ -209,8 +208,9 @@ static inline HashTable *restore_hash(HashTable * target, HashTable * source, re
 		}
 		np->pListLast = prev_p;
 		np->pListNext = NULL;
+		np->arKey = ((char *)np + sizeof(Bucket));
 
-		memcpy(np->arKey, p->arKey, p->nKeyLength);
+		memcpy((char *)np->arKey, p->arKey, p->nKeyLength);
 
 		if (prev_p) {
 			prev_p->pListNext = np;
@@ -250,8 +250,7 @@ static inline HashTable *restore_hash_zval_ptr(HashTable * target, HashTable * s
 	prev_p = NULL;
 	np = NULL;
 	while (p) {
-		np = (Bucket *) emalloc(offsetof(Bucket, arKey) + p->nKeyLength);
-		/*    np = (Bucket *) emalloc(sizeof(Bucket) + p->nKeyLength); */
+		np = (Bucket *) emalloc(sizeof(Bucket) + p->nKeyLength);
 		nIndex = p->h % source->nTableSize;
 		if (target->arBuckets[nIndex]) {
 			np->pNext = target->arBuckets[nIndex];
@@ -298,8 +297,9 @@ static inline HashTable *restore_hash_zval_ptr(HashTable * target, HashTable * s
 		}
 		np->pListLast = prev_p;
 		np->pListNext = NULL;
+		np->arKey = ((char *)np + sizeof(Bucket));
 
-		memcpy(np->arKey, p->arKey, p->nKeyLength);
+		memcpy((char *)np->arKey, p->arKey, p->nKeyLength);
 
 		if (prev_p) {
 			prev_p->pListNext = np;

@@ -40,6 +40,7 @@ int eaccelerator_cas (unsigned long cas, const char *key, int key_len, zval * va
 int eaccelerator_get (const char *key, int key_len, zval * return_value, unsigned long *cas TSRMLS_DC);
 int eaccelerator_rm (const char *key, int key_len TSRMLS_DC);
 size_t eaccelerator_gc (eaccelerator_mm *instance TSRMLS_DC);
+int eaccelerator_incr_decr(const char *key, int key_len, long value, time_t ttl TSRMLS_DC);
 
 int eaccelerator_list_keys(zval *return_value TSRMLS_DC);
 

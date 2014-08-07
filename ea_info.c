@@ -153,6 +153,42 @@ PHP_FUNCTION(eaccelerator_list_keys)
 }
 /* }}} */
 
+PHP_FUNCTION(eaccelerator_incr) /* {{{ */
+{
+	char *key;
+	int key_len;
+	long val = 1;
+	time_t ttl = 0;
+
+	if (zend_parse_parameters (ZEND_NUM_ARGS() TSRMLS_CC, "s|ll", &key, &key_len, &val, &ttl) == FAILURE) {
+		return;
+	}
+
+	if (eaccelerator_incr_decr(key, key_len, val, ttl TSRMLS_CC)) {
+		RETURN_TRUE;
+	}
+	RETURN_FALSE;
+}
+/* }}} */
+
+PHP_FUNCTION(eaccelerator_decr) /* {{{ */
+{
+	char *key;
+	int key_len;
+	long val = 1;
+	time_t ttl = 0;
+
+	if (zend_parse_parameters (ZEND_NUM_ARGS() TSRMLS_CC, "s|ll", &key, &key_len, &val, &ttl) == FAILURE) {
+		return;
+	}
+
+	if (eaccelerator_incr_decr(key, key_len, -val, ttl TSRMLS_CC)) {
+		RETURN_TRUE;
+	}
+	RETURN_FALSE;
+}
+/* }}} */
+
 /*
  * Local variables:
  * tab-width: 4

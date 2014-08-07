@@ -147,6 +147,133 @@ int eaccelerator_put(const char *key, int key_len, zval * val, time_t ttl TSRMLS
 }
 /* }}} */
 
+int eaccelerator_incr_decr(const char *key, int key_len, long value, time_t ttl TSRMLS_DC) /* {{{ */
+{
+    ea_user_cache_entry *p, *q, *x = NULL;
+    unsigned int slot, hv;
+    long size;
+    int ret = 0;
+    int xlen;
+    char *xkey;
+	zval val;
+
+	if (ea_mm_user_instance == NULL) {
+		return 0;
+	}
+
+	xkey = build_key(key, key_len, &xlen TSRMLS_CC);
+	hv = zend_get_hash_value(xkey, xlen + 1);
+	slot = hv & EA_USER_HASH_MAX;
+
+	EACCELERATOR_UNPROTECT(ea_mm_user_instance);
+	EACCELERATOR_LOCK_RW(ea_mm_user_instance);
+
+	q = NULL;
+	p = ea_mm_user_instance->user_hash[slot];
+	while (p != NULL) {
+		if ((p->hv == hv) && (strcmp(p->key, xkey) == 0)) {
+			x = p;
+			if (p->ttl != 0 && p->ttl < time(0)) {
+				x = NULL;
+			}
+			break;
+		}
+		q = p;
+		p = p->next;
+	}
+
+	if (x) {
+		ret = 1;
+		switch (Z_TYPE(x->value)) {
+			case IS_LONG:
+				Z_LVAL(x->value) += value;
+				break;
+			case IS_DOUBLE:
+				Z_DVAL(x->value) += value;
+				break;
+			case IS_NULL:
+				Z_TYPE(x->value) = IS_LONG;
+				Z_LVAL(x->value) = value;
+				break;
+			default:
+				php_error_docref(NULL TSRMLS_CC, E_WARNING, "variable '%s' is not an integer/double/NULL, but is a %s instead", xkey, zend_get_type_by_const(Z_TYPE(x->value)));
+				ret = 0;
+				break;
+		}
+
+		EACCELERATOR_UNLOCK_RW(ea_mm_user_instance);
+		EACCELERATOR_PROTECT(ea_mm_user_instance);
+		/* an item with such key already exists, bail out */
+		if (xlen != key_len) {
+			efree(xkey);
+		}
+		return ret;
+	}
+
+	INIT_ZVAL(val);
+	ZVAL_LONG(&val, value);
+
+	EAG(mem) = NULL;
+	zend_hash_init(&EAG(strings), 0, NULL, NULL, 0);
+	EACCELERATOR_ALIGN(EAG(mem));
+	EAG(mem) += offsetof(ea_user_cache_entry, key) + xlen + 1;
+	EAG(mem) += calc_zval(&val TSRMLS_CC);
+	zend_hash_destroy(&EAG(strings));
+
+	size = (long) EAG(mem);
+
+	EAG(mem) = NULL;
+	EAG(mem) = eaccelerator_malloc_nolock(ea_mm_user_instance, size);
+	if (EAG(mem)) {
+		memset(EAG(mem), 0, size);
+		zend_hash_init(&EAG(strings), 0, NULL, NULL, 0);
+		EACCELERATOR_ALIGN(EAG(mem));
+		q = (ea_user_cache_entry *) EAG(mem);
+		q->size = size;
+		EAG(mem) += offsetof(ea_user_cache_entry, key) + xlen + 1;
+		q->hv = zend_get_hash_value(xkey, xlen + 1);
+		memcpy(q->key, xkey, xlen + 1);
+		memcpy(&q->value, &val, sizeof(zval));
+		q->ttl = ttl ? time(0) + ttl : 0;
+		q->create = time(0);
+		/* set the refcount to 1 */
+		Z_SET_REFCOUNT_P(&q->value, 1);
+		store_zval(&EAG(mem), &q->value TSRMLS_CC);
+		zend_hash_destroy(&EAG(strings));
+
+		/*
+		 * storing to shared memory
+		 */
+		slot = q->hv & EA_USER_HASH_MAX;
+		hv = q->hv;
+
+		ea_mm_user_instance->user_hash_cnt++;
+		q->next = ea_mm_user_instance->user_hash[slot];
+		q->cas = GET_NEW_CAS(ea_mm_user_instance);
+		ea_mm_user_instance->user_hash[slot] = q;
+		p = q->next;
+		while (p != NULL) {
+			if ((p->hv == hv) && (strcmp(p->key, xkey) == 0)) {
+				ea_mm_user_instance->user_hash_cnt--;
+				q->next = p->next;
+				eaccelerator_free_nolock(ea_mm_user_instance, p);
+				break;
+			}
+			q = p;
+			p = p->next;
+		}
+		ret = 1;
+	}
+	EACCELERATOR_UNLOCK_RW(ea_mm_user_instance);
+	EACCELERATOR_PROTECT(ea_mm_user_instance);
+
+	if (xlen != key_len) {
+		efree(xkey);
+	}
+	return ret;
+}
+/* }}} */
+
 /* add a key in the cache (fail if it already exists) */
 int eaccelerator_add(const char *key, int key_len, zval * val, time_t ttl TSRMLS_DC) /* {{{ */
 {

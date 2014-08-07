@@ -427,6 +427,8 @@ zend_function_entry eaccelerator_functions[] = {
   PHP_FE(eaccelerator_get, arginfo_eaccelerator_get)
   PHP_FE(eaccelerator_rm, NULL)
   PHP_FE(eaccelerator_gc, NULL)
+  PHP_FE(eaccelerator_incr, NULL)
+  PHP_FE(eaccelerator_decr, NULL)
   PHP_FE(eaccelerator_list_keys, NULL)
   {NULL, NULL, NULL, 0U, 0U}
 };

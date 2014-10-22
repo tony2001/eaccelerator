@@ -111,7 +111,6 @@ typedef struct mm_core {
   void*            attach_addr;
   struct mm_mutex* lock;
   mm_free_bucket*  free_list;
-  int holding_lock_type;
 } mm_core;
 
 typedef union mm_mem_head {
@@ -743,7 +742,6 @@ int mm_lock(MM* mm, int kind) {
     return 0;
   }
   if (mm_do_lock(mm->lock, kind)) {
-    mm->holding_lock_type = kind;
     return 1;
   } else {
 #if !defined(MM_TEST_SEM) && !defined(MM_TEST_SHM)
@@ -753,17 +751,11 @@ int mm_lock(MM* mm, int kind) {
   }
 }
 
-int mm_get_holding_lock(MM *mm)
-{
-	return mm->holding_lock_type;
-}
-
 int mm_unlock(MM* mm) {
   if (!mm) {
     return 0;
   }
   if (mm_do_unlock(mm->lock)) {
-    mm->holding_lock_type = -1;
     return 1;
   } else {
 #if !defined(MM_TEST_SEM) && !defined(MM_TEST_SHM)
@@ -1352,7 +1344,6 @@ MM* mm_create(size_t size, const char* key) {
     mm_destroy_shm(p);
     return NULL;
   }
-  p->holding_lock_type = -1;
   return p;
 }
 

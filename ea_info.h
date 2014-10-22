@@ -42,6 +42,8 @@ PHP_FUNCTION(eaccelerator_cas);
 PHP_FUNCTION(eaccelerator_get);
 PHP_FUNCTION(eaccelerator_rm);
 PHP_FUNCTION(eaccelerator_gc);
+PHP_FUNCTION(eaccelerator_incr);
+PHP_FUNCTION(eaccelerator_decr);
 PHP_FUNCTION(eaccelerator_list_keys);
 
 #endif /* INCLUDED_INFO_H */

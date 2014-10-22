@@ -150,6 +150,7 @@ size_t calc_zval(zval *zv TSRMLS_DC)
     return size;
 }
 
+#if 0
 /* Calculate the size of an op_array */
 static size_t calc_op_array(zend_op_array * from TSRMLS_DC)
 {
@@ -328,6 +329,7 @@ size_t calc_size(char *key, zend_op_array * op_array, Bucket * f, Bucket * c TSR
 
     return size;
 }
+#endif
 
 // this macro returns the current position to place data and advances the pointer
 // to the next positions and aligns it
@@ -415,7 +417,7 @@ static void store_hash_int(char **at, HashTable *target, HashTable *source,
                 }
             }
 
-            np = (Bucket *)ALLOCATE(at, offsetof(Bucket, arKey) + p->nKeyLength);
+            np = (Bucket *)ALLOCATE(at, sizeof(Bucket) + p->nKeyLength);
 
             nIndex = p->h % source->nTableSize;
             if (target->arBuckets[nIndex]) {
@@ -440,8 +442,9 @@ static void store_hash_int(char **at, HashTable *target, HashTable *source,
 
             np->pListLast = prev_p;
             np->pListNext = NULL;
+			np->arKey = ((char*)np) + sizeof(Bucket);
 
-            memcpy(np->arKey, p->arKey, p->nKeyLength);
+            memcpy((char *)np->arKey, p->arKey, p->nKeyLength);
 
             if (prev_p) {
                 prev_p->pListNext = np;
@@ -479,6 +482,7 @@ void store_zval(char **at, zval *zv TSRMLS_DC)
     }
 }
 
+#if 0
 static ea_op_array *store_op_array(char **at, zend_op_array * from TSRMLS_DC)
 {
     ea_op_array *to;
@@ -949,5 +953,6 @@ void eaccelerator_store_int(ea_cache_entry *entry, char *key, int len, zend_op_a
 
     zend_hash_destroy(&EAG(strings));
 }
+#endif
 
 #endif /* HAVE_EACCELERATOR */

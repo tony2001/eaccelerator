@@ -16,9 +16,6 @@ PHP_ARG_ENABLE(eaccelerator, whether to enable eaccelerator support,
 PHP_ARG_ENABLE(eaccelerator-crash-detection, whether to enable eAccelerator crash detection,
 [  --disable-eaccelerator-crash-detection   Do not include eaccelerator crash detection], yes, no)
 
-PHP_ARG_ENABLE(eaccelerator-disassembler, whether to include eAccelerator disassembler,
-[  --enable-eaccelerator-disassembler       Include eaccelerator disassembler], no, no)
-
 PHP_ARG_ENABLE(eaccelerator-debug, whether to enable eAccelerator debug code,
 [  --enable-eaccelerator-debug              Enable the debug code so eaccelerator logs verbose.], no, no)
 
@@ -42,17 +39,13 @@ if test "$PHP_EACCELERATOR" != "no"; then
       AC_DEFINE(HAVE_MPROTECT, 1, [Define if you have mprotect function])
   ])
 
-  eac_sources="eaccelerator.c ea_info.c ea_restore.c ea_store.c mm.c fnmatch.c opcodes.c debug.c ea_cache.c"
+  eac_sources="eaccelerator.c ea_info.c debug.c ea_restore.c ea_store.c mm.c ea_cache.c"
   
   if test "$PHP_EACCELERATOR_DOC_COMMENT_INCLUSION" = "yes"; then
     AC_DEFINE(INCLUDE_DOC_COMMENTS, 1, [If you want eAccelerator to retain doc-comments in internal php structures (meta-programming)])
   fi
   if test "$PHP_EACCELERATOR_CRASH_DETECTION" = "yes"; then
     AC_DEFINE(WITH_EACCELERATOR_CRASH_DETECTION, 1, [Define if you like to release eAccelerator resources on PHP crash])
-  fi
-  if test "$PHP_EACCELERATOR_DISASSEMBLER" = "yes"; then
-    eac_sources="$eac_sources ea_dasm.c"
-    AC_DEFINE(WITH_EACCELERATOR_DISASSEMBLER, 1, [Define if you like to explore Zend bytecode])
   fi
   if test "$PHP_EACCELERATOR_DEBUG" = "yes"; then
     AC_DEFINE(WITH_EACCELERATOR_DEBUG, 1, [Define if you want to enable eaccelerator debug code])

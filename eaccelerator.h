@@ -32,6 +32,7 @@
 #include "zend.h"
 #include "zend_API.h"
 #include "zend_extensions.h"
+#include <signal.h>
 
 #if !defined(ZEND_WIN32) && defined(HAVE_CONFIG_H)
 #  if ZEND_MODULE_API_NO >= 20001222
@@ -156,28 +157,31 @@
 #  define EACCELERATOR_UNPROTECT(instance)
 #endif
 
-#define EACCELERATOR_LOCK_RW(instance)    do { \
+#define EACCELERATOR_LOCK_RW(instance)   \
+		EA_HANDLE_BLOCK_INTERRUPTIONS(); \
 		ZTS_LOCK();\
 		mm_lock((instance)->mm, MM_LOCK_RW); \
-	} \
-	while(0)
 
-#define EACCELERATOR_LOCK_RD(instance)    do { \
+#define EACCELERATOR_LOCK_RD(instance)   \
+		EA_HANDLE_BLOCK_INTERRUPTIONS(); \
 		ZTS_LOCK();\
-		mm_lock((instance)->mm, MM_LOCK_RD); \
-	} \
-	while(0)
+		mm_lock((instance)->mm, MM_LOCK_RD)
 
-#define EACCELERATOR_UNLOCK(instance)     do { \
+#define EACCELERATOR_UNLOCK(instance)     \
 		mm_unlock((instance)->mm); \
 		ZTS_UNLOCK(); \
-	} while(0)
+		EA_HANDLE_UNBLOCK_INTERRUPTIONS(); \
 
 #define EACCELERATOR_UNLOCK_RW(instance)  EACCELERATOR_UNLOCK((instance))
 #define EACCELERATOR_UNLOCK_RD(instance)  EACCELERATOR_UNLOCK((instance))
 
-#define EACCELERATOR_BLOCK_INTERRUPTIONS()   HANDLE_BLOCK_INTERRUPTIONS()
-#define EACCELERATOR_UNBLOCK_INTERRUPTIONS() HANDLE_UNBLOCK_INTERRUPTIONS()
+#define EA_HANDLE_BLOCK_INTERRUPTIONS() \
+		sigset_t oldmask, blockmask; \
+		sigfillset(&blockmask); \
+		sigprocmask(SIG_BLOCK, &blockmask, &oldmask)
+
+#define EA_HANDLE_UNBLOCK_INTERRUPTIONS() \
+		sigprocmask(SIG_SETMASK, &oldmask, NULL)
 
 #define EACCELERATOR_HASH_LEVEL 2
 #define EA_HASH_SIZE      512
@@ -474,7 +478,7 @@ ZEND_EXTERN_MODULE_GLOBALS (eaccelerator)
 
 #define EACCELERATOR_VERSION_GUID   "PHPE8EDA1B6-806A-4851-B1C8-A6B4712F44FB"
 #define EACCELERATOR_LOGO_GUID      "PHPE6F78DE9-13E4-4dee-8518-5FA2DACEA803"
-#define EACCELERATOR_VERSION_STRING ("eAccelerator " EACCELERATOR_VERSION " (PHP " PHP_VERSION ")")
+#define EACCELERATOR_VERSION_STRING (EACCELERATOR_EXTENSION_NAME " " EACCELERATOR_VERSION " (PHP " PHP_VERSION ")")
 
 #endif 		/* HAVE_EACCELERATOR */
 #endif		/* #ifndef INCLUDED_EACCELERATOR_H */

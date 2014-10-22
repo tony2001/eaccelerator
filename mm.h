@@ -44,7 +44,7 @@ extern "C" {
 #endif
 
 #define MM_LOCK_RW 1
-#define MM_LOCK_RD 0
+#define MM_LOCK_RD 2
 
 MM*    _mm_create(size_t size, const char* key);
 void   _mm_set_attach(MM* mm, void* attach_addr);
@@ -60,7 +60,6 @@ void   _mm_free_lock(MM* mm, void* p);
 void*  _mm_malloc_nolock(MM* mm, size_t size);
 void   _mm_free_nolock(MM* mm, void* p);
 size_t _mm_sizeof(MM* mm, void* x);
-int mm_get_holding_lock(MM *mm);
 
 
 const char* mm_shm_type();

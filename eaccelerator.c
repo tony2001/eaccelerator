@@ -420,16 +420,57 @@ ZEND_BEGIN_ARG_INFO_EX(arginfo_eaccelerator_get, 0, 0, 1)
   ZEND_ARG_INFO(1, cas)
 ZEND_END_ARG_INFO()
 
+ZEND_BEGIN_ARG_INFO_EX(arginfo_eaccelerator_put, 0, 0, 2)
+  ZEND_ARG_INFO(0, key)
+  ZEND_ARG_INFO(0, value)
+  ZEND_ARG_INFO(0, ttl)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO_EX(arginfo_eaccelerator_add, 0, 0, 2)
+  ZEND_ARG_INFO(0, key)
+  ZEND_ARG_INFO(0, value)
+  ZEND_ARG_INFO(0, ttl)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO_EX(arginfo_eaccelerator_cas, 0, 0, 3)
+  ZEND_ARG_INFO(0, cas)
+  ZEND_ARG_INFO(0, key)
+  ZEND_ARG_INFO(0, value)
+  ZEND_ARG_INFO(0, ttl)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO_EX(arginfo_eaccelerator_rm, 0, 0, 1)
+  ZEND_ARG_INFO(0, key)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO_EX(arginfo_eaccelerator_gc, 0, 0, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO_EX(arginfo_eaccelerator_list_keys, 0, 0, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO_EX(arginfo_eaccelerator_incr, 0, 0, 1)
+  ZEND_ARG_INFO(0, key)
+  ZEND_ARG_INFO(0, value)
+  ZEND_ARG_INFO(0, ttl)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO_EX(arginfo_eaccelerator_decr, 0, 0, 1)
+  ZEND_ARG_INFO(0, key)
+  ZEND_ARG_INFO(0, value)
+  ZEND_ARG_INFO(0, ttl)
+ZEND_END_ARG_INFO()
+
 zend_function_entry eaccelerator_functions[] = {
-  PHP_FE(eaccelerator_put, NULL)
-  PHP_FE(eaccelerator_add, NULL)
-  PHP_FE(eaccelerator_cas, NULL)
+  PHP_FE(eaccelerator_put, arginfo_eaccelerator_put)
+  PHP_FE(eaccelerator_add, arginfo_eaccelerator_add)
+  PHP_FE(eaccelerator_cas, arginfo_eaccelerator_cas)
   PHP_FE(eaccelerator_get, arginfo_eaccelerator_get)
-  PHP_FE(eaccelerator_rm, NULL)
-  PHP_FE(eaccelerator_gc, NULL)
-  PHP_FE(eaccelerator_incr, NULL)
-  PHP_FE(eaccelerator_decr, NULL)
-  PHP_FE(eaccelerator_list_keys, NULL)
+  PHP_FE(eaccelerator_rm, arginfo_eaccelerator_rm)
+  PHP_FE(eaccelerator_gc, arginfo_eaccelerator_gc)
+  PHP_FE(eaccelerator_incr, arginfo_eaccelerator_incr)
+  PHP_FE(eaccelerator_decr, arginfo_eaccelerator_decr)
+  PHP_FE(eaccelerator_list_keys, arginfo_eaccelerator_list_keys)
   {NULL, NULL, NULL, 0U, 0U}
 };
 

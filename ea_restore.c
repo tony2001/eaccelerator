@@ -208,7 +208,7 @@ static inline HashTable *restore_hash(HashTable * target, HashTable * source, re
 		}
 		np->pListLast = prev_p;
 		np->pListNext = NULL;
-		np->arKey = ((char *)np + sizeof(Bucket));
+		/* np->arKey = ((char *)np + sizeof(Bucket)); */
 
 		memcpy((char *)np->arKey, p->arKey, p->nKeyLength);
 
@@ -297,7 +297,7 @@ static inline HashTable *restore_hash_zval_ptr(HashTable * target, HashTable * s
 		}
 		np->pListLast = prev_p;
 		np->pListNext = NULL;
-		np->arKey = ((char *)np + sizeof(Bucket));
+		/* np->arKey = ((char *)np + sizeof(Bucket)); */
 
 		memcpy((char *)np->arKey, p->arKey, p->nKeyLength);
 

@@ -442,7 +442,7 @@ static void store_hash_int(char **at, HashTable *target, HashTable *source,
 
             np->pListLast = prev_p;
             np->pListNext = NULL;
-			np->arKey = ((char*)np) + sizeof(Bucket);
+			/* np->arKey = ((char*)np) + sizeof(Bucket); */
 
             memcpy((char *)np->arKey, p->arKey, p->nKeyLength);
 
